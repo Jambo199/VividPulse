@@ -84,7 +84,11 @@ object GsmArena {
         val specs = Regex("""data-spec="([a-z0-9]+)"[^>]*>(.*?)</(?:td|h1|span)>""", RegexOption.DOT_MATCHES_ALL)
             .findAll(html)
             .associate { it.groupValues[1] to text(it.groupValues[2]) }
-        val name = specs["modelname"]?.ifBlank { null } ?: return null
+        // The name: tagged on the desktop site; the mobile site only has it as the heading and title.
+        val name = specs["modelname"]?.ifBlank { null }
+            ?: Regex("""<h1[^>]*>(.*?)</h1>""", RegexOption.DOT_MATCHES_ALL).find(html)?.groupValues?.get(1)?.let(::text)?.ifBlank { null }
+            ?: Regex("""<title>(.*?)</title>""", RegexOption.DOT_MATCHES_ALL).find(html)?.groupValues?.get(1)?.let(::text)?.substringBefore(" - ")?.ifBlank { null }
+            ?: return null
         val back = cameras(specs["cam1modules"], specs["cam1features"], specs["cam1video"], front = false)
         val front = cameras(specs["cam2modules"], specs["cam2features"], specs["cam2video"], front = true)
         if (back == null && front == null) return null

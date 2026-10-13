@@ -47,8 +47,20 @@ jobs:
           curl -sSL -m 30 -A "$UA" -o ci-gsm/search.html "https://www.gsmarena.com/results.php3?sQuickSearch=yes&sName=vivo+X200+Ultra" || true
           curl -sSL -m 30 -A "$UA" -o ci-gsm/phone.html "https://www.gsmarena.com/vivo_x200_ultra-13762.php" || true
           ls -la ci-gsm
-          echo "--- search page: $(grep -c . ci-gsm/search.html) lines, title: $(grep -o '<title>[^<]*' ci-gsm/search.html)"
-          echo "--- links to phone pages on it:"; grep -oE '<a href="[a-z0-9_]+-[0-9]+\.php"[^>]*>.{0,200}' ci-gsm/search.html | head -15 | cut -c1-300
+          DESKTOP="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+          curl -sSL -m 30 -A "$DESKTOP" -o ci-gsm/search-desktop.html "https://www.gsmarena.com/results.php3?sQuickSearch=yes&sName=vivo+X200+Ultra" || true
+          curl -sSL -m 30 -A "$UA" -o ci-gsm/search-short.html "https://www.gsmarena.com/results.php3?sQuickSearch=yes&sName=x200+ultra" || true
+          curl -sSL -m 30 -A "$DESKTOP" -o ci-gsm/home.html "https://www.gsmarena.com/" || true
+          for f in ci-gsm/search*.html; do
+            echo "--- $f: $(wc -c < $f) bytes, title: $(grep -o '<title>[^<]*' $f)"
+            grep -oE 'href="[^"]*x200[^"]*"' -i $f | sort -u | head -10
+            grep -n -i -E 'makers|no results|not found|x200' $f | head -12 | cut -c1-300
+          done
+          echo "--- quick search data the site's search box uses:"
+          grep -oE 'quicksearch-[0-9]+\.jpg' ci-gsm/home.html | head -3
+          QS=$(grep -oE 'quicksearch-[0-9]+\.jpg' ci-gsm/home.html | head -1)
+          [ -n "$QS" ] && curl -sSL -m 30 -A "$DESKTOP" "https://www.gsmarena.com/$QS" | head -c 600; echo
+          rm -f ci-gsm/home.html
           echo "--- specs on the phone page:"; grep -oE 'data-spec="[a-z0-9]+"[^>]*>[^<]{0,160}' ci-gsm/phone.html | head -60
 
       - name: Unit tests and release APK
