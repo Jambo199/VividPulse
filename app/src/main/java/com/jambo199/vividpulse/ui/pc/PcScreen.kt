@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -451,8 +453,14 @@ private fun LiveCard(live: PcLive, state: PcState, modifier: Modifier) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
                 )
-                Row(Modifier.fillMaxWidth().height(44.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    live.cpuCores.forEach { c -> VerticalMeter(c / 100f, Accents.cpu.start, Modifier.weight(1f).height(44.dp)) }
+                // Slim bars however many threads there are, centred when there are few.
+                BoxWithConstraints(Modifier.fillMaxWidth().height(44.dp)) {
+                    val n = live.cpuCores.size
+                    val gap = if (n <= 8) 8.dp else 3.dp
+                    val width = ((maxWidth - gap * (n - 1)) / n).coerceAtMost(12.dp)
+                    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally)) {
+                        live.cpuCores.forEach { c -> VerticalMeter(c / 100f, Accents.cpu.start, Modifier.width(width).fillMaxHeight()) }
+                    }
                 }
             }
             val total = live.memoryTotalBytes
@@ -470,7 +478,7 @@ private fun LiveCard(live: PcLive, state: PcState, modifier: Modifier) {
                 live.cpuMhz?.takeIf { it > 0 }?.let { add("CPU clock" to Format.mhz(it.toLong())) }
                 if (gpu != null) {
                     gpu.tempC?.let { add("GPU temp" to Format.temperature(it, settings.fahrenheit)) }
-                    gpu.vramUsedMb?.let { u -> add("Video memory" to (gpu.vramTotalMb?.let { t -> "${gb(u)} / ${gb(t)}" } ?: gb(u))) }
+                    gpu.vramUsedMb?.let { u -> add("Video memory" to (gpu.vramTotalMb?.takeIf { it >= 1024 }?.let { t -> vram(u, t) } ?: gb(u))) }
                     gpu.powerW?.let { add("GPU power" to "${it.roundToInt()} W") }
                     gpu.clockMhz?.let { add("GPU clock" to Format.mhz(it.toLong())) }
                     gpu.fanPercent?.let { add("GPU fan" to "${it.roundToInt()}%") }
@@ -665,7 +673,7 @@ private fun LazyListScope.specCards(s: PcSpecs) {
             s.cpu.maxMhz?.let { InfoRow("Base clock", Format.mhz(it.toLong())) }
             val cache = listOfNotNull(s.cpu.l2Kb?.takeIf { it > 0 }?.let { "L2 ${cacheSize(it)}" }, s.cpu.l3Kb?.takeIf { it > 0 }?.let { "L3 ${cacheSize(it)}" })
             if (cache.isNotEmpty()) InfoRow("Cache", cache.joinToString(" · "))
-            s.cpu.socket?.let { InfoRow("Socket", it) }
+            s.cpu.socket?.takeUnless { it.equals("None", ignoreCase = true) }?.let { InfoRow("Socket", it) }
         }
     }
     val gpus = realGpus(s)
@@ -783,6 +791,9 @@ private fun ramGb(bytes: Long): String {
     val gib = bytes / (1024.0 * 1024 * 1024)
     return if (gib >= 1) "${gib.roundToInt()} GB" else "${(bytes / (1024 * 1024))} MB"
 }
+
+/** "8.9 / 12 GB": short enough for a third of the card. */
+private fun vram(usedMb: Float, totalMb: Float): String = String.format(Locale.US, "%.1f / %.0f GB", usedMb / 1024, totalMb / 1024)
 
 private fun gb(mb: Float): String = if (mb >= 1024) String.format(Locale.US, "%.1f GB", mb / 1024) else "${mb.roundToInt()} MB"
 

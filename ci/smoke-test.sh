@@ -265,8 +265,8 @@ texts
 if tap "Installed ("; then
   shot 62c-pc-installed 4
   texts
-  tap "Play Cyberpunk 2077" && sleep 3
-  grep -q "launch 1091500" "$PC_LOG" && echo "   ✅ the PC was asked to start Cyberpunk 2077" || echo "   ⚠️ no launch request reached the PC"
+  tap "Play ARC Raiders" && sleep 3
+  grep -q "launch 1808500" "$PC_LOG" && echo "   ✅ the PC was asked to start ARC Raiders" || echo "   ⚠️ no launch request reached the PC"
 fi
 fling_up 4; shot 62d-pc-specs 3
 fling_up 4; shot 62e-pc-specs-more 3
