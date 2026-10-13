@@ -12,7 +12,7 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Charge limit, overnight report and sale alerts. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Asking to be left alone by battery saving, so charge alerts arrive on time (vivo). -->
+    <!-- Asking to be left alone by battery saving, so charge alerts arrive on time (Samsung, Xiaomi, vivo and others hold background work back). -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Switching Private DNS. Only works once granted from a computer (adb), never by itself. -->
     <uses-permission

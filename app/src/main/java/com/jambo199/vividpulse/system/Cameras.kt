@@ -243,6 +243,22 @@ object CameraMath {
         else -> "Telephoto"
     }
 
+    /**
+     * The video modes worth quoting from all of a side's cameras: the biggest, 4K's fastest when
+     * that isn't the biggest, and the fastest slow motion. "8K 30 fps · 4K 60 fps · 240 fps slow motion".
+     */
+    fun videoSummary(modes: List<VideoMode>): String? {
+        if (modes.isEmpty()) return null
+        val order = listOf("8K", "4K", "1440p", "1080p", "720p")
+        val best = modes.groupBy { it.name }
+            .map { (name, list) -> VideoMode(name, list.maxOf { it.fps }, list.mapNotNull { it.slowMotionFps }.maxOrNull()) }
+            .sortedBy { order.indexOf(it.name).let { i -> if (i < 0) order.size else i } }
+        val parts = mutableListOf("${best[0].name} ${best[0].fps} fps")
+        best.drop(1).firstOrNull { it.name == "4K" }?.let { parts += "4K ${it.fps} fps" }
+        best.mapNotNull { it.slowMotionFps }.maxOrNull()?.let { parts += "$it fps slow motion" }
+        return parts.joinToString(" · ")
+    }
+
     /** Camera2 dynamic range profile flags to the HDR formats they mean. */
     fun hdrNames(profiles: Set<Long>): List<String> = buildList {
         if (profiles.contains(2L)) add("HLG") // HLG10
@@ -253,27 +269,36 @@ object CameraMath {
 }
 
 /** A camera lens as the maker lists it. */
-data class KnownLens(val kind: String, val megapixels: Int, val mm: Int?, val sensor: String?, val aperture: String?, val notes: String?)
+data class KnownLens(
+    val kind: String,
+    val megapixels: Int,
+    val mm: Int?,
+    val sensor: String?,
+    val aperture: String?,
+    val notes: String? = null,
+    val front: Boolean = false,
+)
 
-data class KnownCameras(val source: String, val lenses: List<KnownLens>, val video: String)
+data class KnownCameras(val source: String, val lenses: List<KnownLens>, val backVideo: String, val frontVideo: String?)
 
 /**
- * What some phones' cameras are as the maker sells them. Apps only see what Android shares with
- * them, which on many phones is fewer lenses (and binned resolutions) than the camera app uses.
+ * Some phones' cameras as the maker sells them. Apps only see what Android shares with them,
+ * which on some phones is fewer lenses (and smaller resolutions) than the camera app uses.
  */
 object KnownPhones {
     fun cameras(phoneName: String): KnownCameras? {
         val n = phoneName.lowercase(Locale.US)
         return when {
             "x200 ultra" in n -> KnownCameras(
-                source = "vivo's published specs",
+                source = "vivo's specs",
                 lenses = listOf(
-                    KnownLens("Main", 50, 35, "Sony LYT-818 · 1/1.28\"", "f/1.69", "Stabilised"),
-                    KnownLens("Ultra-wide", 50, 14, "Sony LYT-818 · 1/1.28\"", "f/2.0", null),
-                    KnownLens("Telephoto (periscope)", 200, 85, "Samsung ISOCELL HP9 · 1/1.4\"", "f/2.27", "3.7× optical · up to 200 mm with vivo's 2.35× extender"),
-                    KnownLens("Selfie", 50, null, null, null, "4K 60 fps video"),
+                    KnownLens("Ultra-wide", 50, 14, "Sony LYT-818 · 1/1.28\"", "f/2.0"),
+                    KnownLens("Main", 50, 35, "Sony LYT-818 · 1/1.28\"", "f/1.69", "OIS"),
+                    KnownLens("Telephoto", 200, 85, "Samsung HP9 · 1/1.4\"", "f/2.27", "3.7× optical"),
+                    KnownLens("Selfie", 50, null, null, null, front = true),
                 ),
-                video = "8K at 30 fps (there's no 8K 60 fps mode)\n4K at up to 120 fps on all three back cameras\n1080p at up to 240 fps\n10-bit Log, Dolby Vision HDR and HDR10+",
+                backVideo = "8K 30 fps · 4K 120 fps · 240 fps slow motion",
+                frontVideo = "4K 60 fps",
             )
             else -> null
         }

@@ -123,7 +123,18 @@ class ListsAndCamerasTest {
         val back = known!!.lenses.filter { it.kind != "Selfie" }
         assertEquals(listOf(14, 35, 85), back.mapNotNull { it.mm }.sorted())
         assertEquals(200, back.maxOf { it.megapixels })
-        assertTrue(known.video.startsWith("8K at 30 fps"))
+        assertEquals("8K 30 fps · 4K 120 fps · 240 fps slow motion", known.backVideo)
+        assertEquals(listOf("Selfie"), known.lenses.filter { it.front }.map { it.kind })
         assertNull(KnownPhones.cameras("Pixel 9"))
+    }
+
+    @Test
+    fun videoInOneShortLine() {
+        val wide = CameraMath.videoModes(listOf(Triple(3840, 2160, 60), Triple(1920, 1080, 60)), listOf(Triple(1920, 1080, 240)))
+        val tele = CameraMath.videoModes(listOf(Triple(7680, 4320, 24), Triple(3840, 2160, 30)), emptyList())
+        assertEquals("8K 24 fps · 4K 60 fps · 240 fps slow motion", CameraMath.videoSummary(wide + tele))
+        assertEquals("4K 60 fps · 240 fps slow motion", CameraMath.videoSummary(wide))
+        assertEquals("1080p 30 fps", CameraMath.videoSummary(CameraMath.videoModes(listOf(Triple(1920, 1080, 30)), emptyList())))
+        assertNull(CameraMath.videoSummary(emptyList()))
     }
 }

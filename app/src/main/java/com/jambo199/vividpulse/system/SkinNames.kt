@@ -34,6 +34,32 @@ object SkinNames {
         else -> "1"
     }
 
+    /**
+     * Every other maker's version of Android, from the properties each one sets ([prop] reads one,
+     * "" when unset). Null for phones that run Android as it comes (Pixel, Motorola, Sony…).
+     */
+    fun other(maker: String, brand: String, prop: (String) -> String): String? {
+        val who = "$maker $brand".lowercase()
+        val oneUi = prop("ro.build.version.oneui").toIntOrNull()
+        if (oneUi != null && oneUi > 0) return "One UI " + tidy("${oneUi / 10000}.${oneUi / 100 % 100}")
+        prop("ro.mi.os.version.name").ifBlank { null }?.let { return "HyperOS " + tidy(it.removePrefix("OS")) }
+        prop("ro.miui.ui.version.name").ifBlank { null }?.let { return "MIUI " + tidy(it.removePrefix("V")) }
+        prop("ro.build.version.realmeui").ifBlank { null }?.let { return "realme UI " + version(it) }
+        prop("ro.build.version.oplusrom").ifBlank { null }?.let {
+            return (if ("oneplus" in who) "OxygenOS " else "ColorOS ") + version(it).substringBefore('.')
+        }
+        prop("hw_sc.build.platform.version").ifBlank { null }?.let { return "HarmonyOS " + version(it) }
+        prop("ro.build.version.magic").ifBlank { null }?.let { return "MagicOS " + version(it) }
+        prop("ro.build.version.emui").ifBlank { null }?.let { return "EMUI " + version(it) }
+        return null
+    }
+
+    /** "V15.0.0", "MagicOS_8.0.0", "EmotionUI_14.2.0" → "15", "8", "14.2". */
+    private fun version(raw: String): String {
+        val v = Regex("\\d+(?:\\.\\d+)?").find(raw)?.value ?: return raw.trim()
+        return tidy(v)
+    }
+
     /** "16.0" → "16"; anything else stays as it is. */
     private fun tidy(v: String): String = v.trim().removeSuffix(".0")
 }

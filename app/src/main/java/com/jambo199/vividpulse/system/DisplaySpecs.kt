@@ -15,7 +15,7 @@ data class DisplaySpec(
     /** The panel's full resolution (portrait). */
     val maxWidth: Int,
     val maxHeight: Int,
-    /** The resolution it's running at now; vivo phones often run below full to save power. */
+    /** The resolution it's running at now; many phones (Samsung, vivo…) run below full to save power. */
     val width: Int,
     val height: Int,
     val refreshRates: List<Float>,

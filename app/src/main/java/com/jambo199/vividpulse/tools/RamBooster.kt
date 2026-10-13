@@ -65,7 +65,7 @@ data class BoostState(
 /**
  * Frees up RAM the only way an app can on today's Android (since Android 14 apps can't close other
  * apps): it briefly reserves a big block of memory. Android reacts as it always does when memory
- * gets tight: it drops cached files, compresses idle memory into RAM+ (zram) and closes apps that
+ * gets tight: it drops cached files, compresses idle memory (zram) and closes apps that
  * haven't been used for a while. Then the block is handed straight back, leaving that room free.
  *
  * It never goes below a safety floor ([floorFor]) and stops early if Android signals low memory, so
@@ -97,7 +97,7 @@ class RamBooster(private val context: Context, private val scope: CoroutineScope
             val before = snapshot()
             sample(before)
             step(0, StepStatus.DONE, "${Format.bytes(before.total - before.available)} in use · ${Format.bytes(before.available)} available" +
-                if (before.swapTotal > 0) " · RAM+ ${Format.bytes(before.swapUsed)} used" else "")
+                if (before.swapTotal > 0) " · ${MemInfo.extraRamName} ${Format.bytes(before.swapUsed)} used" else "")
 
             // 2. This app's own spare memory.
             step(1, StepStatus.RUNNING)
@@ -151,7 +151,7 @@ class RamBooster(private val context: Context, private val scope: CoroutineScope
             }
             val after = snapshot()
             val result = BoostResult(before, after, ownBefore, ownAfter, peak)
-            Log.i(TAG, "Available ${before.available} -> ${after.available}, held up to $peak, RAM+ ${before.swapUsed} -> ${after.swapUsed}")
+            Log.i(TAG, "Available ${before.available} -> ${after.available}, held up to $peak, swap ${before.swapUsed} -> ${after.swapUsed}")
             step(4, StepStatus.DONE, describe(result))
             prefs.edit().putLong("at", System.currentTimeMillis()).putLong("gained", result.gained).apply()
             _state.value = _state.value.copy(running = false, result = result, reserved = 0)
@@ -224,11 +224,11 @@ class RamBooster(private val context: Context, private val scope: CoroutineScope
         }
 
         val STEPS = listOf(
-            BoostStep("Check memory", "Reads how much RAM is in use, cached, and compressed into RAM+."),
+            BoostStep("Check memory", "Reads how much RAM is in use, cached, and compressed."),
             BoostStep("Tidy Vivid Pulse itself", "Clears this app's own picture cache and spare memory."),
             BoostStep(
                 "Ask Android to make room",
-                "Briefly holds a large block of memory. Android does what it always does when memory runs short: drops cached files, compresses idle memory into RAM+ and closes apps you haven't used in a while.",
+                "Briefly holds a large block of memory. Android does what it always does when memory runs short: drops cached files, compresses idle memory and closes apps you haven't used in a while.",
             ),
             BoostStep("Give it all back", "Releases the block at once, so that space is left free."),
             BoostStep("Compare", "Measures again and shows what changed."),

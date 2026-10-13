@@ -1,10 +1,12 @@
 package com.jambo199.vividpulse
 
+import com.jambo199.vividpulse.system.MemInfo
 import com.jambo199.vividpulse.system.SkinNames
 import com.jambo199.vividpulse.tools.BoostResult
 import com.jambo199.vividpulse.tools.MemSnapshot
 import com.jambo199.vividpulse.tools.RamBooster
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -51,5 +53,36 @@ class SkinAndRamTest {
         assertTrue(RamBooster.describe(r).contains("+3 GB"))
         val none = BoostResult(snap(5 * gb, 3 * gb, 1 * gb), snap(5 * gb, 3 * gb, 1 * gb), 1, 1, 0)
         assertTrue(RamBooster.describe(none).contains("good shape"))
+    }
+
+    private fun skin(maker: String, vararg props: Pair<String, String>): String? {
+        val map = props.toMap()
+        return SkinNames.other(maker, maker, { map[it].orEmpty() })
+    }
+
+    @Test
+    fun everyMakersAndroidByName() {
+        assertEquals("One UI 6.1", skin("samsung", "ro.build.version.oneui" to "60100"))
+        assertEquals("One UI 7", skin("samsung", "ro.build.version.oneui" to "70000"))
+        assertEquals("HyperOS 2", skin("Xiaomi", "ro.mi.os.version.name" to "OS2.0", "ro.miui.ui.version.name" to "V816"))
+        assertEquals("MIUI 14", skin("Xiaomi", "ro.miui.ui.version.name" to "V14"))
+        assertEquals("OxygenOS 15", skin("OnePlus", "ro.build.version.oplusrom" to "V15.0.0"))
+        assertEquals("ColorOS 14", skin("OPPO", "ro.build.version.oplusrom" to "V14.0.1"))
+        assertEquals("realme UI 5", skin("realme", "ro.build.version.realmeui" to "V5.0", "ro.build.version.oplusrom" to "V14.0.0"))
+        assertEquals("MagicOS 8", skin("HONOR", "ro.build.version.magic" to "MagicOS_8.0.0"))
+        assertEquals("HarmonyOS 4.2", skin("HUAWEI", "hw_sc.build.platform.version" to "4.2.0", "ro.build.version.emui" to "EmotionUI_14.2.0"))
+        assertEquals("EMUI 12", skin("HUAWEI", "ro.build.version.emui" to "EmotionUI_12.0.0"))
+        assertNull(skin("Google"))
+        assertNull(skin("motorola"))
+    }
+
+    @Test
+    fun extraRamByEachMakersName() {
+        assertEquals("RAM+", MemInfo.extraRamName("vivo", "vivo"))
+        assertEquals("RAM+", MemInfo.extraRamName("vivo", "iQOO"))
+        assertEquals("RAM Plus", MemInfo.extraRamName("samsung", "samsung"))
+        assertEquals("Memory extension", MemInfo.extraRamName("Xiaomi", "POCO"))
+        assertEquals("RAM expansion", MemInfo.extraRamName("OnePlus", "OnePlus"))
+        assertEquals("Virtual RAM", MemInfo.extraRamName("Google", "google"))
     }
 }

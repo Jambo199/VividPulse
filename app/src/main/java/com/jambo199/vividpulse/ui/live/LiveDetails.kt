@@ -266,9 +266,9 @@ fun MemoryScreen(back: () -> Unit, open: (String) -> Unit) {
             if (m.swapTotal > 0) {
                 item {
                     GlassCard(Modifier.fillMaxWidth().entrance(2), accent = Accents.memory) {
-                        Text("Extended RAM", style = MaterialTheme.typography.titleMedium)
+                        Text(com.jambo199.vividpulse.system.MemInfo.extraRamName, style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Compressed and on-storage memory the phone adds on top of its RAM (vivo calls it RAM+).",
+                            "Memory the phone adds on top of its RAM, by compressing what's idle (and on some phones, using storage).",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

@@ -5,7 +5,10 @@ import android.os.Build
 import android.os.PowerManager
 import java.io.File
 
-/** GPU load and clock, on phones that let apps read them (many Snapdragon phones do). */
+/**
+ * GPU load and clock, on phones that let apps read them: Adreno (Snapdragon), Mali (Exynos,
+ * Tensor, MediaTek Dimensity) and MediaTek's own GPU counters. Many phones keep them private.
+ */
 data class GpuSample(val load: Float?, val clockMHz: Int?) {
     companion object {
         val EMPTY = GpuSample(null, null)
@@ -20,16 +23,17 @@ class GpuReader {
     val available: Boolean get() = loadPath != null || clockPath != null
 
     fun sample(): GpuSample {
-        val load = loadPath?.let { SysFs.read(it, remember = false) }?.let(::parseLoad)
+        val load = loadPath?.let { path -> SysFs.read(path, remember = false)?.let { parseLoad(it, percentFirst = PERCENT_FIRST.any { k -> k in path }) } }
         val clock = clockPath?.let { SysFs.readLong(it, remember = false) }?.let(::toMHz)
         return GpuSample(load, clock)
     }
 
-    private fun parseLoad(text: String): Float? {
+    private fun parseLoad(text: String, percentFirst: Boolean): Float? {
         // "37 %" (gpu_busy_percentage), "123 456" busy/total (gpubusy), or a plain number.
+        // MediaTek's counters start with the load and add more numbers after it.
         val numbers = text.split(Regex("[^0-9]+")).filter { it.isNotEmpty() }.mapNotNull { it.toLongOrNull() }
         return when {
-            numbers.size >= 2 && text.contains(' ') && !text.contains('%') ->
+            numbers.size >= 2 && !percentFirst && text.contains(' ') && !text.contains('%') ->
                 if (numbers[1] > 0) (numbers[0].toFloat() / numbers[1]).coerceIn(0f, 1f) else 0f
             numbers.isNotEmpty() -> (numbers[0] / 100f).coerceIn(0f, 1f)
             else -> null
@@ -48,16 +52,24 @@ class GpuReader {
             "/sys/class/kgsl/kgsl-3d0/gpubusy",
             "/sys/kernel/gpu/gpu_busy",
             "/sys/devices/platform/gpu/utilization",
+            "/sys/class/misc/mali0/device/utilization",
+            "/sys/kernel/ged/hal/gpu_utilization",
+            "/sys/module/ged/parameters/gpu_loading",
         )
+        val PERCENT_FIRST = listOf("/ged/", "mali")
         val CLOCK_PATHS = listOf(
             "/sys/class/kgsl/kgsl-3d0/gpuclk",
             "/sys/class/kgsl/kgsl-3d0/devfreq/cur_freq",
             "/sys/kernel/gpu/gpu_clock",
+            "/sys/class/misc/mali0/device/cur_freq",
+            "/sys/class/misc/mali0/device/devfreq/cur_freq",
         )
         val MAX_CLOCK_PATHS = listOf(
             "/sys/class/kgsl/kgsl-3d0/max_gpuclk",
             "/sys/class/kgsl/kgsl-3d0/devfreq/max_freq",
             "/sys/kernel/gpu/gpu_max_clock",
+            "/sys/class/misc/mali0/device/max_freq",
+            "/sys/class/misc/mali0/device/devfreq/max_freq",
         )
     }
 }

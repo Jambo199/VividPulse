@@ -2,6 +2,8 @@ package com.jambo199.vividpulse.system
 
 import android.app.ActivityManager
 import android.content.Context
+import android.os.Build
+import java.util.Locale
 
 /** RAM right now, in bytes. */
 data class MemorySample(
@@ -10,7 +12,7 @@ data class MemorySample(
     val cached: Long,
     val buffers: Long,
     val free: Long,
-    /** Swap: on vivo phones this is "extended RAM" (RAM+), plus compressed memory (zram). */
+    /** Swap: compressed memory (zram), plus the extra RAM on storage some phones add ([MemInfo.extraRamName]). */
     val swapTotal: Long,
     val swapFree: Long,
     val lowMemory: Boolean,
@@ -65,6 +67,22 @@ object MemInfo {
     fun marketedStorageGb(totalBytes: Long): Int {
         val gb = totalBytes / 1e9
         return STORAGE_SIZES.firstOrNull { it >= gb * 0.98 } ?: kotlin.math.ceil(gb).toInt()
+    }
+
+    /** What this phone's maker calls the memory it adds on top of RAM: "RAM Plus" on Samsung, "RAM+" on vivo. */
+    val extraRamName: String by lazy { extraRamName(Build.MANUFACTURER.orEmpty(), Build.BRAND.orEmpty()) }
+
+    fun extraRamName(maker: String, brand: String): String {
+        val m = "$maker $brand".lowercase(Locale.US)
+        return when {
+            "vivo" in m || "iqoo" in m -> "RAM+"
+            "samsung" in m -> "RAM Plus"
+            "xiaomi" in m || "redmi" in m || "poco" in m -> "Memory extension"
+            "oppo" in m || "realme" in m || "oneplus" in m -> "RAM expansion"
+            "honor" in m -> "RAM Turbo"
+            "motorola" in m -> "RAM Boost"
+            else -> "Virtual RAM"
+        }
     }
 
     private val RAM_SIZES = listOf(1, 2, 3, 4, 6, 8, 10, 12, 16, 18, 20, 24, 32, 48, 64)

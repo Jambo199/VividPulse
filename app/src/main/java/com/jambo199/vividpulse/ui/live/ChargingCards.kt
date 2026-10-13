@@ -132,7 +132,7 @@ fun ChargingCompanionCard(cycles: Int?, modifier: Modifier = Modifier, turnOn: B
                 )
                 if (!exempt) {
                     Text(
-                        "Allow unrestricted battery use so vivo doesn't hold the companion back",
+                        "Allow unrestricted battery use so your phone's battery saver doesn't hold the companion back",
                         style = MaterialTheme.typography.labelLarge,
                         color = Accents.charging.start,
                         modifier = Modifier.padding(top = 6.dp).clip(CircleShape).bouncyClick {

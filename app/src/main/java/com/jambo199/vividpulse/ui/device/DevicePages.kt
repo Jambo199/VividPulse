@@ -53,9 +53,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.jambo199.vividpulse.system.CameraReader
 import com.jambo199.vividpulse.system.CameraReport
-import com.jambo199.vividpulse.system.CameraSpec
+import com.jambo199.vividpulse.system.CameraMath
+import com.jambo199.vividpulse.system.KnownCameras
+import com.jambo199.vividpulse.system.KnownLens
 import com.jambo199.vividpulse.system.KnownPhones
-import com.jambo199.vividpulse.system.LensSpec
 import com.jambo199.vividpulse.system.DisplayReader
 import com.jambo199.vividpulse.system.DisplaySpec
 import com.jambo199.vividpulse.system.SensorCatalog
@@ -77,7 +78,6 @@ import com.jambo199.vividpulse.ui.components.entrance
 import com.jambo199.vividpulse.ui.components.sharedCard
 import com.jambo199.vividpulse.ui.rememberSpecs
 import com.jambo199.vividpulse.ui.theme.Accents
-import com.jambo199.vividpulse.ui.theme.Numbers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Locale
@@ -190,137 +190,99 @@ fun rememberMeasuredFps(): Float {
 }
 
 @OptIn(ExperimentalLayoutApi::class)
+/** One lens on the Cameras page: "50 MP · 35 mm · Main", then sensor, aperture and stabilisation. */
+private data class LensLine(val megapixels: Int?, val mm: Int?, val kind: String, val details: String)
+
+/** The back or front cameras: their lenses, then a line or two (video, zoom). */
+private data class CameraGroup(val title: String, val front: Boolean, val lenses: List<LensLine>, val rows: List<Pair<String, String>>)
+
+private fun groups(k: KnownCameras): List<CameraGroup> {
+    fun line(l: KnownLens) = LensLine(l.megapixels, l.mm, l.kind, listOfNotNull(l.sensor, l.aperture, l.notes).joinToString(" · "))
+    val back = k.lenses.filter { !it.front }
+    val front = k.lenses.filter { it.front }
+    return listOfNotNull(
+        back.takeIf { it.isNotEmpty() }?.let { CameraGroup("Back cameras", false, it.map(::line), listOf("Video" to k.backVideo)) },
+        front.takeIf { it.isNotEmpty() }?.let { CameraGroup(if (it.size > 1) "Front cameras" else "Front camera", true, it.map(::line), listOfNotNull(k.frontVideo?.let { v -> "Video" to v })) },
+    )
+}
+
+private fun groups(r: CameraReport): List<CameraGroup> = listOf("Back", "Front", "External").mapNotNull { facing ->
+    val lenses = r.lenses.filter { it.facing == facing }.ifEmpty { return@mapNotNull null }
+    val cameras = r.cameras.filter { it.facing == facing }
+    val rows = listOfNotNull(
+        CameraMath.videoSummary(cameras.flatMap { it.videoModes })?.let { "Video" to it },
+        cameras.mapNotNull { it.zoom }.takeIf { facing == "Back" && it.isNotEmpty() }
+            ?.let { z -> "Zoom" to zoomText(z.minOf { it.start }) + " to " + zoomText(z.maxOf { it.endInclusive }) },
+    )
+    val title = "$facing camera" + if (lenses.size > 1) "s" else ""
+    CameraGroup(
+        title,
+        facing == "Front",
+        lenses.map { l ->
+            LensLine(
+                l.megapixels?.roundToInt(),
+                l.equivalentMm,
+                l.kind,
+                listOfNotNull(l.sensorType, l.aperture?.let { "f/$it" }, "OIS".takeIf { l.ois }).joinToString(" · "),
+            )
+        },
+        rows,
+    )
+}
+
 @Composable
 fun CamerasScreen(back: () -> Unit) {
     val context = LocalContext.current
     val specs = rememberSpecs()
-    val report by produceState<CameraReport?>(null) { value = withContext(Dispatchers.IO) { CameraReader.read(context) } }
     val known = specs?.name?.let { KnownPhones.cameras(it) }
+    // Only asked for when the maker's own specs aren't known.
+    val report by produceState<CameraReport?>(null, specs, known) {
+        if (specs != null && known == null) value = withContext(Dispatchers.IO) { CameraReader.read(context) }
+    }
+    val shown: List<CameraGroup>? = when {
+        known != null -> groups(known)
+        else -> report?.let { groups(it) }
+    }
     DetailPage(
         "Cameras",
         back,
-        subtitle = report?.let { r -> "${r.lenses.size} lenses found · ${r.cameras.size} cameras apps can open" },
+        subtitle = shown?.takeIf { it.isNotEmpty() }?.joinToString(" · ") { g -> "${g.lenses.size} ${g.title.substringBefore(' ').lowercase(Locale.US)}" },
     ) {
-        if (known != null) {
-            item {
-                GlassCard(Modifier.fillMaxWidth().sharedCard("card-cameras"), accent = Accents.upload) {
-                    CardTitle(Icons.Rounded.CameraAlt, "What your phone has", Accents.upload, trailing = known.source)
-                    Spacer(Modifier.height(8.dp))
-                    known.lenses.forEach { l ->
-                        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.width(76.dp)) {
-                                Text("${l.megapixels} MP", style = MaterialTheme.typography.titleLarge)
-                                l.mm?.let { Text("$it mm", style = MaterialTheme.typography.labelMedium, color = Accents.upload.start) }
-                            }
-                            Column(Modifier.weight(1f)) {
-                                Text(l.kind, style = MaterialTheme.typography.titleSmall)
-                                val line = listOfNotNull(l.sensor, l.aperture, l.notes).joinToString(" · ")
-                                if (line.isNotEmpty()) Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                    InfoRow("Video", known.video)
+        when {
+            shown == null -> items(2) { ShimmerBox(Modifier.fillMaxWidth().height(200.dp)) }
+            shown.isEmpty() -> item {
+                GlassCard(Modifier.fillMaxWidth().sharedCard("card-cameras")) {
+                    Text("This device has no cameras that apps can see.", style = MaterialTheme.typography.bodyMedium)
                 }
             }
-        }
-        val r = report
-        if (r == null) {
-            items(2) { ShimmerBox(Modifier.fillMaxWidth().height(200.dp)) }
-        } else {
-            item {
-                GlassCard(
-                    Modifier.fillMaxWidth().then(if (known == null) Modifier.sharedCard("card-cameras") else Modifier).entrance(1),
-                    accent = Accents.cpu,
-                ) {
-                    CardTitle(Icons.Rounded.CameraAlt, "What Android shares with apps", Accents.cpu)
-                    if (r.lenses.isEmpty()) {
-                        Text("No cameras are shared with apps on this device.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
-                    }
-                    r.lenses.forEach { l -> LensRow(l) }
-                }
-            }
-            r.cameras.forEachIndexed { i, cam -> item { CameraCard(cam, Modifier.entrance(i + 2)) } }
-            item {
-                Text(
-                    "Android often shares fewer lenses with apps than the camera has, joins several into one camera that switches as you zoom, and reports a lower \"binned\" resolution than the sensor's full one. The phone's own camera app uses all of it, so it can do more than appears here.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 6.dp),
-                )
+            else -> shown.forEachIndexed { i, g ->
+                item { CameraGroupCard(g, Modifier.then(if (i == 0) Modifier.sharedCard("card-cameras") else Modifier).entrance(i)) }
             }
         }
     }
 }
 
 @Composable
-private fun LensRow(l: LensSpec) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.width(76.dp)) {
-            Text(l.megapixels?.let { "${it.roundToInt()} MP" } ?: "—", style = MaterialTheme.typography.titleLarge)
-            l.equivalentMm?.let { Text("$it mm", style = MaterialTheme.typography.labelMedium, color = Accents.cpu.start) }
-        }
-        Column(Modifier.weight(1f)) {
-            Text("${l.facing} · ${l.kind}", style = MaterialTheme.typography.titleSmall)
-            val line = listOfNotNull(
-                l.sensorType?.let { "$it sensor" },
-                l.aperture?.let { "f/$it" },
-                "stabilised".takeIf { l.ois },
-            ).joinToString(" · ")
-            if (line.isNotEmpty()) Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun CameraCard(cam: CameraSpec, modifier: Modifier) {
-    val front = cam.facing == "Front"
-    val accent = if (front) Accents.upload else Accents.games
-    // "14 mm, 35 mm and 85 mm", or the kinds of lens when their focal lengths aren't known.
-    val lensNames = cam.lenses.map { l -> l.equivalentMm?.let { "$it mm" } ?: l.kind.lowercase(Locale.US) }.distinct()
+private fun CameraGroupCard(g: CameraGroup, modifier: Modifier) {
+    val accent = if (g.front) Accents.upload else Accents.games
     GlassCard(modifier.fillMaxWidth(), accent = accent) {
-        CardTitle(
-            Icons.Rounded.CameraAlt,
-            "${cam.facing} camera" + if (cam.lenses.size > 1) " · ${cam.lenses.size} lenses" else "",
-            accent,
-            trailing = "id ${cam.id}" + if (cam.hidden) " · unlisted" else "",
-        )
-        if (cam.lenses.size > 1) {
-            Text(
-                if (lensNames.size > 1) {
-                    "Switches between its ${lensNames.dropLast(1).joinToString(", ")} and ${lensNames.last()} lenses as you zoom"
-                } else {
-                    "Joins ${cam.lenses.size} lenses into one"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        }
-        Spacer(Modifier.height(10.dp))
-        Row {
-            Stat("Biggest photo", cam.megapixels?.let { "${it.roundToInt()} MP" } ?: "—", Modifier.weight(1f))
-            Stat("Zoom", cam.zoom?.let { z -> zoomText(z.start) + "–" + zoomText(z.endInclusive) } ?: "—", Modifier.weight(1f))
-            Stat("Video", cam.video ?: "—", Modifier.weight(1f))
-        }
-        if (cam.videoModes.size > 1 || cam.videoModes.any { it.slowMotionFps != null }) {
-            Spacer(Modifier.height(10.dp))
-            Text("Video modes apps can use", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            cam.videoModes.forEach { m ->
-                Text(m.toString(), style = MaterialTheme.typography.bodyMedium.merge(Numbers), modifier = Modifier.padding(top = 2.dp))
+        CardTitle(Icons.Rounded.CameraAlt, g.title, accent)
+        Spacer(Modifier.height(4.dp))
+        g.lenses.forEach { l ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.width(80.dp)) {
+                    Text(l.megapixels?.let { "$it MP" } ?: "—", style = MaterialTheme.typography.titleLarge)
+                    l.mm?.let { Text("$it mm", style = MaterialTheme.typography.labelMedium, color = accent.start) }
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(l.kind, style = MaterialTheme.typography.titleSmall)
+                    if (l.details.isNotEmpty()) {
+                        Text(l.details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
         }
-        Spacer(Modifier.height(12.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            cam.slowMotionFps?.let { Pill("Slow motion $it fps", accent) }
-            cam.hdrVideo.forEach { Pill(it, Accents.storage) }
-            cam.modes.forEach { Pill(it, Accents.memory, filled = false) }
-            if (cam.raw) Pill("RAW", Accents.memory)
-            if (cam.lenses.any { it.ois }) Pill("Stabilised", Accents.battery)
-            if (cam.flash) Pill("Flash", Accents.gpu, filled = false)
-        }
-        Spacer(Modifier.height(6.dp))
-        InfoRow("Camera support", cam.level)
+        g.rows.forEach { (label, value) -> InfoRow(label, value) }
     }
 }
 

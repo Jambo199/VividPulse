@@ -103,7 +103,7 @@ fun FreeRamScreen(back: () -> Unit, autoStart: Boolean = false) {
                             AnimatedNumber(availableGb ?: 0f, { String.format(Locale.US, "%.2f GB", it) }, MaterialTheme.typography.titleLarge, color = Accents.battery.start)
                         }
                         Stat("RAM", if (total > 0) "${com.jambo199.vividpulse.system.MemInfo.marketedRamGb(total)} GB" else "—")
-                        if ((m?.swapTotal ?: 0) > 0) Stat("RAM+ in use", Format.bytes(m!!.swapUsed))
+                        if ((m?.swapTotal ?: 0) > 0) Stat("${com.jambo199.vividpulse.system.MemInfo.extraRamName} in use", Format.bytes(m!!.swapUsed))
                     }
                 }
                 AnimatedVisibility(state.availableHistory.size > 1, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
@@ -264,7 +264,7 @@ private fun ResultCard(r: BoostResult, modifier: Modifier) {
         Spacer(Modifier.height(6.dp))
         InfoRow("Available before", Format.bytes(r.before.available))
         InfoRow("Available now", Format.bytes(r.after.available))
-        if (r.compressed > 10_000_000) InfoRow("Squeezed into RAM+", Format.bytes(r.compressed))
+        if (r.compressed > 10_000_000) InfoRow("Compressed", Format.bytes(r.compressed))
         if (r.cacheCleared > 10_000_000) InfoRow("Cached files dropped", Format.bytes(r.cacheCleared))
         InfoRow("Vivid Pulse itself", "${Format.bytes(r.ownBeforeKb * 1024)} → ${Format.bytes(r.ownAfterKb * 1024)}")
         Text(

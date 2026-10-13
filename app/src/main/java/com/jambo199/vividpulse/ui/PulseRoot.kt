@@ -23,7 +23,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -168,7 +170,12 @@ fun PulseRoot(requests: MutableStateFlow<String?>) {
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
     Box(Modifier.fillMaxSize()) {
-        SharedTransitionLayout {
+        // On tablets, foldables and phones turned sideways the pages stay a readable width,
+        // centred; the full-screen tests still use the whole screen.
+        val fullWidth = route in FULL_SCREEN_ROUTES
+        SharedTransitionLayout(
+            (if (fullWidth) Modifier.fillMaxSize() else Modifier.widthIn(max = MAX_PAGE_WIDTH).fillMaxHeight()).align(Alignment.TopCenter),
+        ) {
             CompositionLocalProvider(LocalSharedScope provides this) {
                 NavHost(
                     navController = nav,
@@ -328,6 +335,12 @@ private fun BottomBar(selected: Tab, onSelect: (Tab) -> Unit) {
         }
     }
 }
+
+/** Pages that use the whole screen however wide it is. */
+private val FULL_SCREEN_ROUTES = setOf(Routes.SCREEN, Routes.TOUCH, Routes.FPS)
+
+/** The widest the app's pages get (a big phone is about 410 dp wide, an unfolded foldable 700–900). */
+private val MAX_PAGE_WIDTH = 720.dp
 
 /** Space at the bottom of tab pages so the last item clears the floating bar. */
 val TabBottomPadding = 112.dp

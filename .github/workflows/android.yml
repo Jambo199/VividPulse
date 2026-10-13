@@ -196,8 +196,58 @@ jobs:
         if: always()
         run: bash ci/thumbnails.sh screenshots
 
+  # Every page on the oldest Android the app supports and on a tablet, so it works on any phone,
+  # not just the newest.
+  compat-test:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    continue-on-error: true
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: android-8
+            api: 26
+            profile: pixel_2
+          - name: tablet
+            api: 34
+            profile: pixel_tablet
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: vivid-pulse-apk
+          path: dist
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Open every page (${{ matrix.name }})
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          profile: ${{ matrix.profile }}
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back emulated -camera-front emulated
+          script: bash ci/quick-test.sh "$(ls dist/*.apk | head -1)" compat-${{ matrix.name }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compat-${{ matrix.name }}
+          path: compat-${{ matrix.name }}
+
   publish:
-    needs: [build, emulator-test, pc-companion]
+    needs: [build, emulator-test, pc-companion, compat-test]
     if: always() && needs.build.result == 'success' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     continue-on-error: true
@@ -225,6 +275,12 @@ jobs:
           name: vivid-pulse-pc
           path: pc
 
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: compat-*
+          path: compat
+
       - name: Publish pre-release with the APK
         run: |
           BUILD=$((GITHUB_RUN_NUMBER + BUILD_OFFSET))
@@ -244,7 +300,11 @@ jobs:
           cat version.json
           cp dist/changelog.json changelog.json
           files="VividPulse.apk version.json changelog.json"
-          if [ -f shots/screenshots.zip ]; then cp shots/screenshots.zip screenshots.zip; files="$files screenshots.zip"; fi
+          # The emulator test's screenshots, plus the other devices' in a folder each.
+          mkdir -p allshots
+          if [ -f shots/screenshots.zip ]; then (cd allshots && unzip -q ../shots/screenshots.zip); fi
+          if [ -d compat ]; then cp -r compat/* allshots/ 2>/dev/null || true; fi
+          if [ -n "$(ls -A allshots)" ]; then (cd allshots && zip -q -r ../screenshots.zip .); files="$files screenshots.zip"; fi
           if [ -f pc/VividPulsePC.zip ]; then cp pc/VividPulsePC.zip VividPulsePC.zip; files="$files VividPulsePC.zip"; fi
           cat > notes.md <<NOTES
           **Vivid Pulse for Android – build $BUILD** (\`${GITHUB_SHA::7}\`, emulator test: ${{ needs.emulator-test.result }})

@@ -25,7 +25,11 @@ class DeviceSpecs(private val context: Context, private val cpu: CpuReader) {
     val brand: String = Build.MANUFACTURER.replaceFirstChar { it.titlecase(Locale.US) }
 
     val name: String = run {
-        val market = listOf("ro.vivo.market.name", "ro.product.marketname", "ro.product.vendor.marketname", "ro.config.marketing_name")
+        // Each maker keeps the name it sells the phone under in its own property.
+        val market = listOf(
+            "ro.vivo.market.name", "ro.product.marketname", "ro.product.vendor.marketname", "ro.config.marketing_name",
+            "ro.vendor.oplus.market.enname", "ro.vendor.oplus.market.name", "ro.oppo.market.name", "ro.product.odm.marketname",
+        )
             .map { SysFs.prop(it) }.firstOrNull { it.isNotBlank() }
             ?: runCatching { Settings.Global.getString(context.contentResolver, Settings.Global.DEVICE_NAME) }.getOrNull()
                 ?.takeIf { it.isNotBlank() && !it.equals(Build.MODEL, ignoreCase = true) }
@@ -40,12 +44,8 @@ class DeviceSpecs(private val context: Context, private val cpu: CpuReader) {
     private val isVivo: Boolean = Build.MANUFACTURER.equals("vivo", ignoreCase = true) ||
         Build.BRAND.equals("iqoo", ignoreCase = true) || SysFs.prop("ro.vivo.os.version").isNotBlank()
 
-    /** "OriginOS 6" and the like: the maker's own version of Android. */
+    /** "One UI 7", "HyperOS 2", "OriginOS 6" and the like: the maker's own version of Android. */
     val skin: String? = run {
-        val oneUi = SysFs.prop("ro.build.version.oneui").toIntOrNull()
-        val hyperOs = SysFs.prop("ro.mi.os.version.name")
-        val miui = SysFs.prop("ro.miui.ui.version.name")
-        val coloros = SysFs.prop("ro.build.version.oplusrom")
         when {
             isVivo -> SkinNames.vivo(
                 displayId = SysFs.prop("ro.vivo.os.build.display.id"),
@@ -55,11 +55,7 @@ class DeviceSpecs(private val context: Context, private val cpu: CpuReader) {
                 overseas = SysFs.prop("ro.vivo.product.overseas"),
                 androidMajor = Build.VERSION.RELEASE.substringBefore('.').toIntOrNull() ?: (Build.VERSION.SDK_INT - 20),
             )
-            oneUi != null -> "One UI ${oneUi / 10000}.${oneUi / 100 % 100}"
-            hyperOs.isNotBlank() -> "HyperOS ${hyperOs.removePrefix("OS")}"
-            miui.isNotBlank() -> "MIUI ${miui.removePrefix("V")}"
-            coloros.isNotBlank() -> "ColorOS ${coloros.removePrefix("V")}"
-            else -> null
+            else -> SkinNames.other(Build.MANUFACTURER.orEmpty(), Build.BRAND.orEmpty(), SysFs::prop)
         }
     }
 

@@ -1,7 +1,9 @@
 # Vivid Pulse (Android)
 
 Your phone's vitals, live, in a dark neon look with smooth animations
-everywhere. Built with the vivo X200 Ultra in mind, works on any Android 8+ phone.
+everywhere. Works on any phone with Android 8 or later (Samsung, Pixel, Xiaomi, OnePlus, OPPO,
+realme, vivo, Honor, Motorola and the rest), and on foldables and tablets, where pages stay a
+readable width. Every build is tested on Android 14, Android 8 and a tablet.
 
 **Install:** on your phone open
 **https://github.com/Jambo199/VividPulse/releases/tag/vivid-pulse-latest** and tap
@@ -15,7 +17,7 @@ lists every version with what it changed, each marked as a **major**, **minor** 
 `ci/changelog.py` builds the list at build time).
 
 - **Live** – CPU activity with a gauge, a smooth-scrolling chart and a bar per core; RAM in use
-  (and vivo's extended RAM+); GPU load and clock where the phone allows; battery level as a
+  (and the extra RAM phones add: RAM Plus, RAM+, memory extension…); GPU load and clock where the phone allows; battery level as a
   sloshing liquid tank, charging/discharging watts, temperature; how close the phone is to
   slowing down from heat; network speed up and down; storage used; how long the phone has been
   on and how much of that it slept. Tap any card and it grows
@@ -28,14 +30,13 @@ lists every version with what it changed, each marked as a **major**, **minor** 
     charge** (time, % gained, % per hour, peak watts, energy) or how fast it's draining since unplugged
   - **Network** – live speeds, Wi-Fi standard (Wi-Fi 7…), band and channel, signal, link speed
   - **Heat** – Android's throttling forecast as a gauge and chart, plus tips for gaming sessions
-- **Device** – everything about the phone: name, Android and OriginOS versions (worked out from
-  several of vivo's build properties, since phones on OriginOS often still carry the old Funtouch
-  names), vivo build number, security update,
+- **Device** – everything about the phone: name, Android version and the maker's own version of it
+  (One UI, HyperOS, OxygenOS, ColorOS, realme UI, MagicOS, HarmonyOS, OriginOS / Funtouch OS),
+  build number, security update,
   kernel, uptime and deep sleep, chip (e.g. Snapdragon 8 Elite) and its cores, display (resolution,
-  refresh rates, HDR formats, size), cameras (for the vivo X200 Ultra, the full kit as vivo sells
-  it; then every lens Android shares with apps, including ones it leaves out of the usual list:
-  full-resolution megapixels, 35 mm-equivalent lens, sensor size, aperture, stabilisation, zoom
-  range, best video mode, slow motion, HLG / HDR10 / Dolby Vision, night and portrait modes, RAW),
+  refresh rates, HDR formats, size), cameras (just the specs: each lens's megapixels, 35 mm-equivalent
+  focal length, sensor size, aperture and stabilisation, plus the best video modes and zoom range;
+  for the vivo X200 Ultra, the lenses as vivo sells them),
   every sensor with live readings, and features such
   as Wi-Fi 7, NFC, the infrared remote and ultra-wideband. Long-press a row to copy it; share the
   whole spec sheet.
@@ -72,7 +73,7 @@ lists every version with what it changed, each marked as a **major**, **minor** 
   android.permission.WRITE_SECURE_SETTINGS`); until then it copies the name and opens the setting.
 - **Free up RAM** – asks Android to make room and shows every step as it happens: how memory
   stands, tidying the app itself, briefly holding a large block of memory so Android drops cached
-  files, compresses idle memory into RAM+ and closes apps you haven't used in a while, handing it
+  files, compresses idle memory and closes apps you haven't used in a while, handing it
   all back, then before/after with what changed. It always keeps a safety margin free, so music
   and anything with a notification keep running. (Since Android 14 apps can't close other apps
   directly; this is how Android itself makes room.) From the Tools tab or the RAM page.
