@@ -352,10 +352,24 @@ jobs:
 
           \`screenshots.zip\` has previews from the automated emulator test.
           NOTES
-          gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
-          sleep 3
-          if ! gh release create "$TAG" $files --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --prerelease --title "Vivid Pulse for Android (build $BUILD)" --notes-file notes.md; then
+          # The release is updated in place (never deleted first), so a failure can't leave the
+          # download page and the in-app updater with nothing.
+          TITLE_LINE="Vivid Pulse for Android (build $BUILD)"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            # version.json goes last: the updater only sees the new build once its APK is up.
+            others=$(echo $files | tr ' ' '\n' | grep -v '^version.json$' | tr '\n' ' ')
+            ok=1
+            gh release upload "$TAG" $others --repo "$GITHUB_REPOSITORY" --clobber || ok=0
+            [ $ok = 1 ] && { gh release upload "$TAG" version.json --repo "$GITHUB_REPOSITORY" --clobber || ok=0; }
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE_LINE" --notes-file notes.md --prerelease || true
+            # Point the release's tag at this build's commit too.
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" -f sha="$GITHUB_SHA" -F force=true > /dev/null || true
+          else
+            ok=1
+            gh release create "$TAG" $files --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --prerelease --title "$TITLE_LINE" --notes-file notes.md || ok=0
+          fi
+          if [ $ok != 1 ]; then
             echo "::warning::Couldn't publish the release. The APK is attached to this run as the vivid-pulse-apk artifact."
             exit 1
           fi
