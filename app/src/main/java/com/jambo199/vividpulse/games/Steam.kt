@@ -92,6 +92,12 @@ data class StoreItem(
     val reviewLabel: String? = null,
     val reviewCount: Long? = null,
     val reviewPercent: Int? = null,
+    /** Free to play. */
+    val isFree: Boolean = false,
+    /** Steam's kind of app: 0 is a game (others: DLC, software, soundtracks…). */
+    val type: Int = 0,
+    /** The tall library cover (600×900). */
+    val coverUrl: String? = null,
 ) {
     /** A game from this listing, in place [rank]. */
     fun toGame(rank: Int) = Game(
@@ -282,6 +288,9 @@ object Steam {
             reviewLabel = reviews?.optString("review_score_label")?.ifBlank { null },
             reviewCount = reviews?.optLong("review_count", 0)?.takeIf { it > 0 },
             reviewPercent = reviews?.optInt("percent_positive", -1)?.takeIf { it >= 0 },
+            isFree = free,
+            type = o.optInt("type", 0),
+            coverUrl = assetUrl(o.optJSONObject("assets"), "library_capsule"),
         )
     }
 

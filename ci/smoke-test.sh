@@ -230,6 +230,61 @@ tap "Automatic" exact && sleep 2
 echo "   private_dns after Automatic: $(adb shell settings get global private_dns_mode)"
 adb shell settings put global private_dns_mode opportunistic
 
+echo "== PC tab (ci/fake-pc.py stands in for Vivid Pulse PC on this computer: 10.0.2.2 from the emulator)"
+PC_LOG="$OUT/fake-pc-log.txt"
+start_pc() { # serves the JSON in $1 on port $2; prints its process ID
+  python3 "$HERE/fake-pc.py" --dir "$1" --port "$2" >> "$PC_LOG" 2>&1 &
+  echo $!
+}
+open_page pc; shot 60-pc-setup 4
+texts
+tap "Find my PC" && shot 60b-pc-find 6
+texts
+if tap "Type the address instead"; then
+  shot 60c-pc-address 2
+  adb shell input keyevent KEYCODE_BACK
+fi
+if [ -n "${PC_REAL:-}" ] && [ -f "$PC_REAL/specs.json" ]; then
+  echo "-- what Vivid Pulse PC sent from the Windows runner (a virtual machine)"
+  REAL_PID=$(start_pc "$PC_REAL" 47900)
+  sleep 1
+  open_page "pc/pair/10.0.2.2:47900/123456"; shot 61-pc-windows-runner 10
+  texts
+  swipe_up; swipe_up; shot 61b-pc-windows-runner-more 3
+  fling_up 6; shot 61c-pc-windows-runner-specs 3
+  kill "$REAL_PID" 2>/dev/null
+  open_page tools; sleep 1
+fi
+echo "-- a gaming PC"
+PC_PID=$(start_pc "$HERE/pc-sample" 47800)
+sleep 1
+open_page "pc/pair/10.0.2.2/123456"; shot 62-pc 10
+texts
+swipe_up; shot 62b-pc-purchased 4
+texts
+if tap "Installed ("; then
+  shot 62c-pc-installed 4
+  texts
+  tap "Play Cyberpunk 2077" && sleep 3
+  grep -q "launch 1091500" "$PC_LOG" && echo "   ✅ the PC was asked to start Cyberpunk 2077" || echo "   ⚠️ no launch request reached the PC"
+fi
+fling_up 4; shot 62d-pc-specs 3
+fling_up 4; shot 62e-pc-specs-more 3
+echo "-- the PC goes away: the page keeps what it had, marked offline"
+kill "$PC_PID" 2>/dev/null
+open_page tools; sleep 1
+open_page pc; sleep 15
+shot 63-pc-offline 1
+texts
+echo "-- and comes back: the page picks up again by itself"
+PC_PID=$(start_pc "$HERE/pc-sample" 47800)
+sleep 20
+shot 64-pc-back 1
+texts
+kill "$PC_PID" 2>/dev/null
+echo "-- what the stand-in PC was asked:"
+tail -15 "$PC_LOG" | sed 's/^/   /'
+
 echo "== Landscape"
 adb shell settings put system accelerometer_rotation 0
 adb shell settings put system user_rotation 1

@@ -72,8 +72,46 @@ jobs:
           name: vivid-pulse-old-apk
           path: dist-old/*.apk
 
+  # Vivid Pulse PC, the Windows program the app's PC tab talks to: run for real on Windows
+  # PowerShell 5.1 against a pretend Steam install, then zipped for the release page.
+  pc-companion:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Vivid Pulse PC and ask it everything the app asks
+        shell: cmd
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File ci\pc-test.ps1
+
+      - name: Check what it sent
+        if: always()
+        run: python ci/check-pc-output.py pc-out
+
+      - name: Zip it
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force "Vivid Pulse PC" | Out-Null
+          Copy-Item pc\* "Vivid Pulse PC"
+          Compress-Archive -Path "Vivid Pulse PC" -DestinationPath VividPulsePC.zip -Force
+          Get-Item VividPulsePC.zip | Format-List Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vivid-pulse-pc
+          path: VividPulsePC.zip
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pc-samples
+          path: pc-out
+
   emulator-test:
-    needs: build
+    needs: [build, pc-companion]
+    if: always() && needs.build.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -90,6 +128,13 @@ jobs:
         with:
           name: vivid-pulse-old-apk
           path: dist-old
+
+      # What Vivid Pulse PC sent on the Windows runner, for the PC tab to show as well.
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: pc-samples
+          path: pc-real
 
       - name: What the game stores answer (for checking the app's parsers)
         continue-on-error: true
@@ -133,7 +178,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back emulated -camera-front emulated
-          script: bash ci/smoke-test.sh "$(ls dist/*.apk | head -1)" screenshots "$(ls dist-old/*.apk | head -1)"
+          script: PC_REAL=pc-real bash ci/smoke-test.sh "$(ls dist/*.apk | head -1)" screenshots "$(ls dist-old/*.apk | head -1)"
 
       - name: Pack screenshots
         if: always()
@@ -152,7 +197,7 @@ jobs:
         run: bash ci/thumbnails.sh screenshots
 
   publish:
-    needs: [build, emulator-test]
+    needs: [build, emulator-test, pc-companion]
     if: always() && needs.build.result == 'success' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     continue-on-error: true
@@ -174,6 +219,12 @@ jobs:
           name: vivid-pulse-screenshots
           path: shots
 
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: vivid-pulse-pc
+          path: pc
+
       - name: Publish pre-release with the APK
         run: |
           BUILD=$((GITHUB_RUN_NUMBER + BUILD_OFFSET))
@@ -194,6 +245,7 @@ jobs:
           cp dist/changelog.json changelog.json
           files="VividPulse.apk version.json changelog.json"
           if [ -f shots/screenshots.zip ]; then cp shots/screenshots.zip screenshots.zip; files="$files screenshots.zip"; fi
+          if [ -f pc/VividPulsePC.zip ]; then cp pc/VividPulsePC.zip VividPulsePC.zip; files="$files VividPulsePC.zip"; fi
           cat > notes.md <<NOTES
           **Vivid Pulse for Android – build $BUILD** (\`${GITHUB_SHA::7}\`, emulator test: ${{ needs.emulator-test.result }})
 
@@ -205,6 +257,9 @@ jobs:
           3. Tap **Install**, then open **Vivid Pulse**.
 
           Already have Vivid Pulse? It checks this page when it opens and offers the update itself.
+
+          ### Vivid Pulse PC (for the app's PC tab)
+          On your Windows PC, download **VividPulsePC.zip**, unzip it and double-click **Start Vivid Pulse PC**. Then on your phone open **PC › Find my PC** and type the code it shows. Your phone then sees the PC's specs, live CPU/GPU/RAM use and your Steam library (Purchased and Installed).
 
           \`screenshots.zip\` has previews from the automated emulator test.
           NOTES

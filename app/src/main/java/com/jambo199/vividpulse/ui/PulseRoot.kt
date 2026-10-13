@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.Handyman
 import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.Smartphone
@@ -85,6 +86,7 @@ import com.jambo199.vividpulse.ui.live.LiveScreen
 import com.jambo199.vividpulse.ui.live.MemoryScreen
 import com.jambo199.vividpulse.ui.live.NetworkScreen
 import com.jambo199.vividpulse.ui.live.ThermalScreen
+import com.jambo199.vividpulse.ui.pc.PcScreen
 import com.jambo199.vividpulse.ui.settings.ChangelogScreen
 import com.jambo199.vividpulse.ui.settings.SettingsScreen
 import com.jambo199.vividpulse.ui.theme.Accents
@@ -102,6 +104,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
     LIVE("live", "Live", Icons.Rounded.MonitorHeart),
     DEVICE("device", "Device", Icons.Rounded.Smartphone),
     GAMES("games", "Games", Icons.Rounded.SportsEsports),
+    PC("pc", "PC", Icons.Rounded.Computer),
     TOOLS("tools", "Tools", Icons.Rounded.Handyman),
 }
 
@@ -178,7 +181,12 @@ fun PulseRoot(requests: MutableStateFlow<String?>) {
                     page(Tab.LIVE.route) { LiveScreen(open) }
                     page(Tab.DEVICE.route) { DeviceScreen(open) }
                     page(Tab.GAMES.route) { GamesScreen(open) }
+                    page(Tab.PC.route) { PcScreen(open) }
                     page(Tab.TOOLS.route) { ToolsScreen(open) }
+                    // Pairs with the PC at that address straight away (used by the automated test).
+                    page("pc/pair/{host}/{code}") { e ->
+                        PcScreen(open, e.arguments?.getString("host"), e.arguments?.getString("code"))
+                    }
                     page(Routes.CPU) { CpuScreen(back) }
                     page(Routes.MEMORY) { MemoryScreen(back, open) }
                     page(Routes.BATTERY) { BatteryScreen(back) }
@@ -293,7 +301,7 @@ private fun BottomBar(selected: Tab, onSelect: (Tab) -> Unit) {
                     .background(Accents.brand.brush, alpha = glow)
                     .semantics { contentDescription = t.label }
                     .bouncyClick { onSelect(t) }
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(

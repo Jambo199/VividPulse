@@ -1,0 +1,3 @@
+pc/*.cmd text eol=crlf
+pc/*.ps1 text eol=crlf
+pc/*.txt text eol=crlf

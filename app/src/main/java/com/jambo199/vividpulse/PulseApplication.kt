@@ -12,6 +12,7 @@ import com.jambo199.vividpulse.alerts.BatteryLog
 import com.jambo199.vividpulse.alerts.ChargeHistory
 import com.jambo199.vividpulse.alerts.Notify
 import com.jambo199.vividpulse.data.SettingsStore
+import com.jambo199.vividpulse.pc.PcRepository
 import com.jambo199.vividpulse.games.GamesRepository
 import com.jambo199.vividpulse.games.WatchStore
 import com.jambo199.vividpulse.system.DeviceSpecs
@@ -57,6 +58,7 @@ object Graph {
     val updates by lazy { UpdateManager(app, scope) }
     val chargeHistory by lazy { ChargeHistory(app) }
     val batteryLog by lazy { BatteryLog(app) }
+    val pc by lazy { PcRepository(app) }
 
     private val specsLazy = lazy { DeviceSpecs(app, monitor.cpu) }
 

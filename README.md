@@ -50,6 +50,17 @@ lists every version with what it changed, each marked as a **major**, **minor** 
   Man Gaming), genres, Metacritic, screenshots, share, and buttons to open it in Steam or see its
   player history. **Star** a game to keep its live player count in *Your games* and get a **price
   alert** when it goes on sale or drops below a price you pick (on Steam, or anywhere).
+- **PC** – your Windows PC on your phone, through **Vivid Pulse PC** (the `pc` folder, published
+  as `VividPulsePC.zip` next to the app): its specs (processor, graphics cards, memory sticks,
+  drives, motherboard, screens, Windows version), live CPU / GPU / RAM use with per-thread bars,
+  GPU temperature, power and fan (NVIDIA), network speed and what you're playing, and your Steam
+  library as two collections, **Purchased** (your own "Purchased" collection if you have one,
+  otherwise the paid games in your library) and **Installed**, with covers, sizes and hours played.
+  Tap a game for its page, or ▶ to start it on the PC. The phone keeps whatever the PC last sent:
+  while the PC is off the tab still shows it, marked offline with when it was last updated, and
+  it starts updating again by itself once Vivid Pulse PC is running. On the PC: unzip, double-click
+  **Start Vivid Pulse PC**, then in the app **PC › Find my PC** and type the 6-digit code it shows
+  (or type its address). It only answers on your local network, only to a phone with the code.
 - **Charging companion** – a live notification while charging (level, watts, time to your limit
   and to full), an alert at 80, 85, 90 or 95%, a history of every charge with its curve, and a
   morning report of how much the battery used overnight.
@@ -86,7 +97,8 @@ only shown where the phone lets apps read them.
 
 Every push to `main` is built and tested by GitHub Actions (`.github/workflows/android.yml`): unit
 tests, then the app is opened on an Android 14 emulator page by page (including the in-app
-updater) with screenshots, then the APK is published to the `vivid-pulse-latest` release that the
+updater, and the PC tab against a stand-in PC) with screenshots; Vivid Pulse PC is run on a
+Windows runner against a pretend Steam install and zipped; then the APK and the zip are published to the `vivid-pulse-latest` release that the
 app updates itself from. Builds are signed with `app/release.jks` so each one installs over the
 last; set the `SIGNING_*` environment variables to use your own key.
 
@@ -98,10 +110,12 @@ last; set the `SIGNING_*` environment variables to use your own key.
 | `app/.../games/` | Steam charts, search and store pages, GG.deals prices, sale calendar, starred games and their alerts |
 | `app/.../alerts/` | Background work: charging companion, overnight report, sale alerts, notifications |
 | `app/.../widget/` | The home screen widgets |
+| `app/.../pc/` | Talking to Vivid Pulse PC: finding it on the network, pairing, specs, live readings, Steam library, kept on the phone for when the PC is off |
+| `pc/` | Vivid Pulse PC for Windows (PowerShell, nothing to install) |
 | `app/.../tools/` | Speed test against Cloudflare |
 | `app/.../update/` | The in-app updater |
 | `app/.../ui/` | Screens; animated gauges, live charts and cards in `ui/components/` |
-| `ci/` | Emulator smoke test, screenshot previews |
+| `ci/` | Emulator smoke test, screenshot previews, the Vivid Pulse PC test on Windows and a stand-in PC for the emulator |
 
 Vivid Pulse started out in [PersonalExeMadeByAI](https://github.com/Jambo199/PersonalExeMadeByAI)
 next to Vivid Music; its earlier history is there.

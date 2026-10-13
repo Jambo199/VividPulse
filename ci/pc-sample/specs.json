@@ -1,0 +1,28 @@
+{
+  "name": "JAMBO-PC",
+  "maker": "System manufacturer",
+  "model": "System Product Name",
+  "os": {"name": "Microsoft Windows 11 Home", "version": "24H2", "build": "26100.4652", "installed": "2024-11-02"},
+  "cpu": {"name": "AMD Ryzen 7 7800X3D 8-Core Processor           ", "cores": 8, "threads": 16, "maxMhz": 4201, "l2Kb": 8192, "l3Kb": 98304, "socket": "AM5"},
+  "gpus": [
+    {"name": "NVIDIA GeForce RTX 4070 SUPER", "vramBytes": 12884901888, "driver": "32.0.15.7680", "width": 2560, "height": 1440, "refreshHz": 165},
+    {"name": "Parsec Virtual Display Adapter", "vramBytes": null, "driver": "0.45.0.0", "width": null, "height": null, "refreshHz": null}
+  ],
+  "memory": {
+    "totalBytes": 34197012480,
+    "sticks": [
+      {"bytes": 17179869184, "speedMts": 6000, "configuredMts": 6000, "type": "DDR5", "maker": "Corsair", "part": "CMK32GX5M2B6000C36", "slot": "DIMM_A2"},
+      {"bytes": 17179869184, "speedMts": 6000, "configuredMts": 6000, "type": "DDR5", "maker": "Corsair", "part": "CMK32GX5M2B6000C36", "slot": "DIMM_B2"}
+    ]
+  },
+  "board": {"maker": "ASUSTeK COMPUTER INC.", "model": "TUF GAMING B650-PLUS WIFI", "bios": "American Megatrends Inc. 3072"},
+  "drives": [
+    {"model": "Samsung SSD 990 PRO 2TB", "bytes": 2000398934016, "kind": "SSD", "bus": "NVMe"},
+    {"model": "WDC WD20EZBX-00AYRA0", "bytes": 2000396321280, "kind": "HDD", "bus": "SATA"}
+  ],
+  "volumes": [
+    {"letter": "C:", "label": "", "bytes": 1999711826944, "freeBytes": 612384915456},
+    {"letter": "D:", "label": "Games", "bytes": 2000381014016, "freeBytes": 845113270272}
+  ],
+  "monitors": {"name": "LG ULTRAGEAR", "maker": "GSM"}
+}
