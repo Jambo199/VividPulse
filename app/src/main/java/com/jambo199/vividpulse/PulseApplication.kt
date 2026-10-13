@@ -1,6 +1,12 @@
 package com.jambo199.vividpulse
 
 import android.app.Application
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
+import com.jambo199.vividpulse.alerts.ChargeWatch
 import com.jambo199.vividpulse.alerts.Background
 import com.jambo199.vividpulse.alerts.BatteryLog
 import com.jambo199.vividpulse.alerts.ChargeHistory
@@ -23,6 +29,17 @@ class PulseApplication : Application() {
         Notify.channels(this)
         // Background checks: hourly battery notes, deal alerts, and the charge watcher if it's on.
         runCatching { Background.schedule(this) }
+        // While the app's process is running, plugging in starts the charge watcher straight away.
+        ContextCompat.registerReceiver(
+            this,
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    if (Graph.settings.current.chargeCompanion) runCatching { ChargeWatch.now(context) }
+                }
+            },
+            IntentFilter(Intent.ACTION_POWER_CONNECTED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 }
 

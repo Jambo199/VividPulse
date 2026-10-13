@@ -101,9 +101,6 @@ jobs:
           probe "https://api.steampowered.com/IStoreTopSellersService/GetWeeklyTopSellers/v1/?input_json=%7B%22country_code%22%3A%22GB%22%2C%22context%22%3A%7B%22language%22%3A%22english%22%2C%22country_code%22%3A%22GB%22%2C%22steam_realm%22%3A1%7D%2C%22data_request%22%3A%7B%22include_assets%22%3Atrue%2C%22include_basic_info%22%3Atrue%7D%2C%22page_start%22%3A0%2C%22page_count%22%3A3%7D" 1500
           probe "https://store.steampowered.com/api/featuredcategories?cc=GB&l=english" 1200
           probe "https://www.valvesoftware.com/about/stats"
-          # GG.deals' price API docs: the example response shows the field names the app reads.
-          echo "--- gg.deals/api/prices docs"
-          curl -sS -m 30 -A "Mozilla/5.0" "https://gg.deals/api/prices/" | python3 -c 'import re,sys,html; t=html.unescape(re.sub(r"<[^>]+>"," ",sys.stdin.read())); t=re.sub(r"\s+"," ",t); i=t.find("currentRetail"); print(t[max(0,i-1500):i+2500] if i>=0 else t[:3000])' || echo "(failed)"
           probe "https://store.steampowered.com/api/storesearch/?term=elden%20ring&l=english&cc=GB" 900
           search() { # a store search page: how many results, rows and the first games on it
             echo "--- store search: $1"

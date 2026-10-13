@@ -98,8 +98,9 @@ sleep 15
 adb shell dumpsys battery set ac 1
 adb shell dumpsys battery set status 2
 echo "-- plugged in at 72%, waiting for the charge watcher"
-for _ in $(seq 1 12); do
+for level in 73 74 75 76 77 78 79 79 79 79 79 79; do
   sleep 10
+  adb shell dumpsys battery set level $level
   if adb shell dumpsys notification --noredact | grep -A40 "pkg=$PKG" | grep -q "Charging"; then break; fi
 done
 notes
@@ -212,7 +213,9 @@ swipe_up; shot 40d-changelog-scrolled 2
 swipe_up; swipe_up; shot 40e-changelog-oldest 2
 
 echo "== Private DNS"
-open_page dns; shot 44-dns 10
+open_page dns; sleep 2
+tap "Got it" exact   # Android's one-time "Viewing full screen" hint, if the screen test left it up
+shot 44-dns 8
 texts
 echo "-- with the permission a computer grants once (adb):"
 adb shell pm grant $PKG android.permission.WRITE_SECURE_SETTINGS

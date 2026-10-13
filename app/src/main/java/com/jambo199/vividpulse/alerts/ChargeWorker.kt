@@ -55,8 +55,8 @@ class ChargeWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 Widgets.updateVitals(context)
             }
         }
-        // Still plugged in: the next run carries on.
-        if (plugged && Graph.settings.current.chargeCompanion) ChargeWatch.next(context)
+        // The next run carries on (still plugged in) or waits for the next charge.
+        if (Graph.settings.current.chargeCompanion) ChargeWatch.next(context)
         return Result.success()
     }
 
@@ -121,9 +121,17 @@ object ChargeWatch {
         WorkManager.getInstance(context).enqueueUniqueWork(NAME, ExistingWorkPolicy.KEEP, request())
     }
 
-    /** Carries on after the current run, while still charging. */
+    /** Carries on after the current run: straight away while charging, otherwise at the next charge. */
     fun next(context: Context) {
         WorkManager.getInstance(context).enqueueUniqueWork(NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request())
+    }
+
+    /**
+     * Plugged in just now (seen while the app is running): starts watching at once rather than
+     * waiting for Android to decide the phone is charging, which can take a minute.
+     */
+    fun now(context: Context) {
+        WorkManager.getInstance(context).enqueueUniqueWork(NAME, ExistingWorkPolicy.REPLACE, OneTimeWorkRequestBuilder<ChargeWorker>().build())
     }
 
     fun stop(context: Context) {
