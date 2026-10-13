@@ -200,7 +200,7 @@ fun GamesScreen(open: (String) -> Unit) {
                 val chart = tab.chart
                 if (chart != null) {
                     val s = chartState ?: ListState()
-                    val games = s.items?.let { if (tab == GamesTab.DEALS) dealSort.apply(it) else it }
+                    val games = s.items?.let { if (tab == GamesTab.DEALS) dealSort.sort(it) else it }
                     when {
                         games != null -> {
                             val history = games.any { it.lastWeekRank != null }

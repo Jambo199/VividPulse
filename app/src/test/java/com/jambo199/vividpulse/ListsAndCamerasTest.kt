@@ -77,11 +77,11 @@ class ListsAndCamerasTest {
             game(3, 3, players = null, discount = 90),
             game(4, 4, players = 3_000, discount = 75, percent = 80, reviews = 5_000),
         )
-        assertEquals(listOf(1, 2, 3, 4), DealSort.POPULAR.apply(games.shuffled()).map { it.appId })
-        assertEquals(listOf(2, 4, 1, 3), DealSort.PLAYERS.apply(games).map { it.appId })
-        assertEquals(listOf(3, 2, 4, 1), DealSort.DISCOUNT.apply(games).map { it.appId })
+        assertEquals(listOf(1, 2, 3, 4), DealSort.POPULAR.sort(games.shuffled()).map { it.appId })
+        assertEquals(listOf(2, 4, 1, 3), DealSort.PLAYERS.sort(games).map { it.appId })
+        assertEquals(listOf(3, 2, 4, 1), DealSort.DISCOUNT.sort(games).map { it.appId })
         // 95% of 200,000 and 80% of 5,000 beat 98% of 40 (as Steam's own labels would); no reviews goes last.
-        assertEquals(listOf(2, 4, 1, 3), DealSort.RATED.apply(games).map { it.appId })
+        assertEquals(listOf(2, 4, 1, 3), DealSort.RATED.sort(games).map { it.appId })
     }
 
     @Test

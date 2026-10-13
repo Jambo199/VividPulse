@@ -37,9 +37,9 @@ enum class DealSort(val label: String) {
     ;
 
     /** [games] in this order; ties keep the store's own order. */
-    fun apply(games: List<Game>): List<Game> = when (this) {
+    fun sort(games: List<Game>): List<Game> = when (this) {
         POPULAR -> games.sortedBy { it.rank }
-        PLAYERS -> games.sortedWith(compareByDescending<Game> { it.playersNow ?: -1 }.thenBy { it.rank })
+        PLAYERS -> games.sortedWith(compareByDescending<Game> { it.playersNow ?: -1L }.thenBy { it.rank })
         DISCOUNT -> games.sortedWith(compareByDescending<Game> { it.discountPercent }.thenBy { it.rank })
         RATED -> games.sortedWith(compareByDescending<Game> { reviewScore(it) }.thenBy { it.rank })
     }
