@@ -34,7 +34,7 @@ data class DisplaySpec(
         inches?.let { SpecRow("Size", String.format(Locale.US, "%.2f\"", it)) },
         ppi?.let { SpecRow("Sharpness", "$it ppi") },
         SpecRow("Refresh rates", refreshRates.joinToString(" / ") { "${it.roundToInt()}" } + " Hz"),
-        SpecRow("HDR", hdr.ifEmpty { listOf("No") }.joinToString(", ")),
+        SpecRow("HDR", if (hdr.isEmpty()) "No" else "Yes · " + hdr.joinToString(", ")),
         maxNits?.takeIf { hdr.isNotEmpty() }?.let { SpecRow("HDR brightness", "${it.roundToInt()} nits") },
         SpecRow("Wide colour", if (wideColor) colorSpace ?: "Yes" else "No"),
         SpecRow("Density", "$densityDpi dpi"),

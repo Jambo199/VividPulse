@@ -117,15 +117,17 @@ class ListsAndCamerasTest {
     }
 
     @Test
-    fun x200UltraAsVivoSellsIt() {
-        val known = KnownPhones.cameras("vivo X200 Ultra")
+    fun x200UltraBuiltIn() {
+        val known = KnownPhones.sheet("vivo X200 Ultra")
         assertNotNull(known)
-        val back = known!!.lenses.filter { it.kind != "Selfie" }
-        assertEquals(listOf(14, 35, 85), back.mapNotNull { it.mm }.sorted())
-        assertEquals(200, back.maxOf { it.megapixels })
-        assertEquals("8K 30 fps · 4K 120 fps · 240 fps slow motion", known.backVideo)
-        assertEquals(listOf("Selfie"), known.lenses.filter { it.front }.map { it.kind })
-        assertNull(KnownPhones.cameras("Pixel 9"))
+        val back = known!!.back!!.lenses
+        assertEquals(listOf(14, 35, 85), back.mapNotNull { it.mm })
+        assertEquals(200f, back.maxOf { it.megapixels ?: 0f })
+        assertTrue(back.all { it.ois })
+        assertEquals("8K 30 fps · 4K 120 fps · 1080p 240 fps", known.back!!.video)
+        assertEquals(listOf("Dolby Vision"), known.back!!.hdrVideo)
+        assertEquals(listOf("Selfie"), known.front!!.lenses.map { it.kind })
+        assertNull(KnownPhones.sheet("Pixel 9"))
     }
 
     @Test

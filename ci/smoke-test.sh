@@ -128,8 +128,14 @@ texts
 swipe_up; shot 11-device-scrolled 2
 swipe_up; shot 12-device-more 2
 open_page display; shot 13-display 4
-open_page cameras; shot 14-cameras 5
+open_page cameras; shot 14-cameras 8
+texts
 swipe_up; shot 14b-cameras-scrolled 2
+echo "-- other phones' cameras, looked up on GSMArena"
+for phone in vivo_X200_Ultra Samsung_Galaxy_S25_Ultra Google_Pixel_9_Pro; do
+  open_page "cameras/$phone"; shot "14c-cameras-$phone" 10
+  texts
+done
 open_page sensors; shot 15-sensors 3
 tap "Accelerometer" && shot 16-sensor-live 3
 

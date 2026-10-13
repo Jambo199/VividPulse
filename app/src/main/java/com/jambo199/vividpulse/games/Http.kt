@@ -10,7 +10,10 @@ import java.net.URLEncoder
 object Http {
     private val USER_AGENT = "VividPulse/${BuildConfig.VERSION_NAME} (Android; https://github.com/Jambo199/VividPulse)"
 
-    fun get(url: String, accept: String = "application/json", timeoutMs: Int = 15_000): String {
+    /** A phone browser's name, for websites that only answer browsers (GSMArena). */
+    const val BROWSER = "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36"
+
+    fun get(url: String, accept: String = "application/json", timeoutMs: Int = 15_000, userAgent: String = USER_AGENT): String {
         var target = url
         repeat(6) {
             val conn = URL(target).openConnection() as HttpURLConnection
@@ -18,7 +21,7 @@ object Http {
                 conn.instanceFollowRedirects = false
                 conn.connectTimeout = 10_000
                 conn.readTimeout = timeoutMs
-                conn.setRequestProperty("User-Agent", USER_AGENT)
+                conn.setRequestProperty("User-Agent", userAgent)
                 conn.setRequestProperty("Accept", accept)
                 when (val code = conn.responseCode) {
                     in 200..299 -> return conn.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }

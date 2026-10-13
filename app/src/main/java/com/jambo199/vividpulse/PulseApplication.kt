@@ -59,6 +59,7 @@ object Graph {
     val chargeHistory by lazy { ChargeHistory(app) }
     val batteryLog by lazy { BatteryLog(app) }
     val pc by lazy { PcRepository(app) }
+    val phoneSheets by lazy { com.jambo199.vividpulse.system.PhoneSheets(app) }
 
     private val specsLazy = lazy { DeviceSpecs(app, monitor.cpu) }
 

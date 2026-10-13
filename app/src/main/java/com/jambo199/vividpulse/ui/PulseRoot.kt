@@ -203,6 +203,8 @@ fun PulseRoot(requests: MutableStateFlow<String?>) {
                     page(Routes.THERMAL) { ThermalScreen(back) }
                     page(Routes.DISPLAY) { DisplayScreen(back, open) }
                     page(Routes.CAMERAS) { CamerasScreen(back) }
+                    // Another phone's cameras, e.g. "cameras/vivo_X200_Ultra" (used by the automated test).
+                    page(Routes.CAMERAS + "/{phone}") { e -> CamerasScreen(back, e.arguments?.getString("phone")?.replace('_', ' ')) }
                     page(Routes.SENSORS) { SensorsScreen(back) }
                     page(Routes.SPEED) { SpeedTestScreen(back) }
                     page(Routes.SCREEN) { ScreenTestScreen(back) }

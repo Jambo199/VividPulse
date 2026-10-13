@@ -268,37 +268,35 @@ object CameraMath {
     }
 }
 
-/** A camera lens as the maker lists it. */
-data class KnownLens(
-    val kind: String,
-    val megapixels: Int,
-    val mm: Int?,
-    val sensor: String?,
-    val aperture: String?,
-    val notes: String? = null,
-    val front: Boolean = false,
-)
-
-data class KnownCameras(val source: String, val lenses: List<KnownLens>, val backVideo: String, val frontVideo: String?)
-
 /**
- * Some phones' cameras as the maker sells them. Apps only see what Android shares with them,
- * which on some phones is fewer lenses (and smaller resolutions) than the camera app uses.
+ * Specs built into the app for a few phones (from GSMArena), for when it can't look them up
+ * (offline). Apps only see what Android shares with them, which on many phones is fewer lenses
+ * and smaller resolutions than the camera has.
  */
 object KnownPhones {
-    fun cameras(phoneName: String): KnownCameras? {
+    fun sheet(phoneName: String): PhoneSheet? {
         val n = phoneName.lowercase(Locale.US)
         return when {
-            "x200 ultra" in n -> KnownCameras(
-                source = "vivo's specs",
-                lenses = listOf(
-                    KnownLens("Ultra-wide", 50, 14, "Sony LYT-818 · 1/1.28\"", "f/2.0"),
-                    KnownLens("Main", 50, 35, "Sony LYT-818 · 1/1.28\"", "f/1.69", "OIS"),
-                    KnownLens("Telephoto", 200, 85, "Samsung HP9 · 1/1.4\"", "f/2.27", "3.7× optical"),
-                    KnownLens("Selfie", 50, null, null, null, front = true),
+            "x200 ultra" in n -> PhoneSheet(
+                name = "vivo X200 Ultra",
+                url = GsmArena.BASE + "vivo_x200_ultra-13762.php",
+                back = SheetCameras(
+                    lenses = listOf(
+                        SheetLens(50f, 14, "Ultra-wide", "1/1.28\"", "f/2.0", ois = true, zoom = null),
+                        SheetLens(50f, 35, "Main", "1/1.28\"", "f/1.7", ois = true, zoom = null),
+                        SheetLens(200f, 85, "Periscope telephoto", "1/1.4\"", "f/2.3", ois = true, zoom = "3.7× optical"),
+                    ),
+                    video = "8K 30 fps · 4K 120 fps · 1080p 240 fps",
+                    hdrVideo = listOf("Dolby Vision"),
+                    hdrPhotos = true,
                 ),
-                backVideo = "8K 30 fps · 4K 120 fps · 240 fps slow motion",
-                frontVideo = "4K 60 fps",
+                front = SheetCameras(
+                    lenses = listOf(SheetLens(50f, 24, "Selfie", null, "f/2.5", ois = false, zoom = null)),
+                    video = "4K 60 fps",
+                    hdrVideo = emptyList(),
+                    hdrPhotos = null,
+                ),
+                displayHdr = listOf("Dolby Vision", "HDR Vivid"),
             )
             else -> null
         }

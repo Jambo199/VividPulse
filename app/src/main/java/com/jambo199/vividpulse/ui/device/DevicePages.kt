@@ -1,5 +1,8 @@
 package com.jambo199.vividpulse.ui.device
 
+import android.content.Intent
+import android.net.Uri
+import com.jambo199.vividpulse.Graph
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -54,9 +57,8 @@ import androidx.compose.ui.unit.dp
 import com.jambo199.vividpulse.system.CameraReader
 import com.jambo199.vividpulse.system.CameraReport
 import com.jambo199.vividpulse.system.CameraMath
-import com.jambo199.vividpulse.system.KnownCameras
-import com.jambo199.vividpulse.system.KnownLens
 import com.jambo199.vividpulse.system.KnownPhones
+import com.jambo199.vividpulse.system.PhoneSheet
 import com.jambo199.vividpulse.system.DisplayReader
 import com.jambo199.vividpulse.system.DisplaySpec
 import com.jambo199.vividpulse.system.SensorCatalog
@@ -104,6 +106,12 @@ fun DisplayScreen(back: () -> Unit, open: (String) -> Unit) {
     }
     val fps = rememberMeasuredFps()
     val top = spec?.refreshRates?.maxOrNull() ?: 60f
+    // HDR formats as Android reports them, plus any more the phone's published specs list.
+    val phone = rememberSpecs()?.name
+    val sheet by produceState<PhoneSheet?>(null, phone) {
+        if (phone != null) value = Graph.phoneSheets.forPhone(phone) ?: KnownPhones.sheet(phone)
+    }
+    val hdrAll = (spec?.hdr.orEmpty() + sheet?.displayHdr.orEmpty()).distinct()
 
     DetailPage("Display", back, subtitle = spec?.let { "${it.maxWidth} × ${it.maxHeight}" }) {
         item {
@@ -140,19 +148,23 @@ fun DisplayScreen(back: () -> Unit, open: (String) -> Unit) {
                             Pill("${r.roundToInt()} Hz", Accents.cpu, filled = (r - hz) * (r - hz) < 1f)
                         }
                     }
-                    if (s.hdr.isNotEmpty()) {
-                        Spacer(Modifier.height(16.dp))
-                        Text("HDR video", style = MaterialTheme.typography.titleMedium)
+                    val hdr = hdrAll
+                    Spacer(Modifier.height(16.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("HDR", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                        Pill(if (hdr.isNotEmpty()) "Supported" else "Not supported", if (hdr.isNotEmpty()) Accents.battery else Accents.thermal, filled = hdr.isNotEmpty())
+                    }
+                    if (hdr.isNotEmpty()) {
                         Spacer(Modifier.height(10.dp))
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            s.hdr.forEach { Pill(it, Accents.storage) }
+                            hdr.forEach { Pill(it, Accents.storage, filled = false) }
                         }
                     }
                 }
             }
             item {
                 GlassCard(Modifier.fillMaxWidth().entrance(2)) {
-                    s.rows().forEach { InfoRow(it.label, it.value) }
+                    s.copy(hdr = hdrAll).rows().forEach { InfoRow(it.label, it.value) }
                 }
             }
         }
@@ -191,18 +203,31 @@ fun rememberMeasuredFps(): Float {
 
 @OptIn(ExperimentalLayoutApi::class)
 /** One lens on the Cameras page: "50 MP · 35 mm · Main", then sensor, aperture and stabilisation. */
-private data class LensLine(val megapixels: Int?, val mm: Int?, val kind: String, val details: String)
+private data class LensLine(val megapixels: String?, val mm: Int?, val kind: String, val details: String)
 
-/** The back or front cameras: their lenses, then a line or two (video, zoom). */
+/** The back or front cameras: their lenses, then a few lines (video, HDR, zoom). */
 private data class CameraGroup(val title: String, val front: Boolean, val lenses: List<LensLine>, val rows: List<Pair<String, String>>)
 
-private fun groups(k: KnownCameras): List<CameraGroup> {
-    fun line(l: KnownLens) = LensLine(l.megapixels, l.mm, l.kind, listOfNotNull(l.sensor, l.aperture, l.notes).joinToString(" · "))
-    val back = k.lenses.filter { !it.front }
-    val front = k.lenses.filter { it.front }
-    return listOfNotNull(
-        back.takeIf { it.isNotEmpty() }?.let { CameraGroup("Back cameras", false, it.map(::line), listOf("Video" to k.backVideo)) },
-        front.takeIf { it.isNotEmpty() }?.let { CameraGroup(if (it.size > 1) "Front cameras" else "Front camera", true, it.map(::line), listOfNotNull(k.frontVideo?.let { v -> "Video" to v })) },
+private fun mp(v: Float): String = if (v % 1f == 0f) "${v.toInt()} MP" else String.format(Locale.US, "%.1f MP", v)
+
+private fun hdrRow(label: String, formats: List<String>): Pair<String, String> =
+    label to if (formats.isEmpty()) "No" else "Yes · " + formats.joinToString(", ")
+
+private fun groups(sheet: PhoneSheet): List<CameraGroup> = listOfNotNull(
+    sheet.back?.let { "Back" to it },
+    sheet.front?.let { "Front" to it },
+).map { (side, c) ->
+    CameraGroup(
+        title = "$side camera" + if (c.lenses.size > 1) "s" else "",
+        front = side == "Front",
+        lenses = c.lenses.map { l ->
+            LensLine(l.megapixels?.let(::mp), l.mm, l.kind, listOfNotNull(l.sensor, l.aperture, "OIS".takeIf { l.ois }, l.zoom).joinToString(" · "))
+        },
+        rows = listOfNotNull(
+            c.video?.let { "Video" to it },
+            hdrRow("HDR video", c.hdrVideo),
+            c.hdrPhotos?.let { "HDR photos" to if (it) "Yes" else "No" },
+        ),
     )
 }
 
@@ -211,6 +236,7 @@ private fun groups(r: CameraReport): List<CameraGroup> = listOf("Back", "Front",
     val cameras = r.cameras.filter { it.facing == facing }
     val rows = listOfNotNull(
         CameraMath.videoSummary(cameras.flatMap { it.videoModes })?.let { "Video" to it },
+        hdrRow("HDR video", cameras.flatMap { it.hdrVideo }.distinct()),
         cameras.mapNotNull { it.zoom }.takeIf { facing == "Back" && it.isNotEmpty() }
             ?.let { z -> "Zoom" to zoomText(z.minOf { it.start }) + " to " + zoomText(z.maxOf { it.endInclusive }) },
     )
@@ -220,7 +246,7 @@ private fun groups(r: CameraReport): List<CameraGroup> = listOf("Back", "Front",
         facing == "Front",
         lenses.map { l ->
             LensLine(
-                l.megapixels?.roundToInt(),
+                l.megapixels?.let { mp(it.roundToInt().toFloat()) },
                 l.equivalentMm,
                 l.kind,
                 listOfNotNull(l.sensorType, l.aperture?.let { "f/$it" }, "OIS".takeIf { l.ois }).joinToString(" · "),
@@ -230,23 +256,35 @@ private fun groups(r: CameraReport): List<CameraGroup> = listOf("Back", "Front",
     )
 }
 
+/**
+ * The phone's cameras: the specs GSMArena lists for it (looked up once, then kept), or built into
+ * the app for a few phones, or failing both, what Android shares with apps. [phoneName] looks up
+ * another phone (used by the automated test).
+ */
 @Composable
-fun CamerasScreen(back: () -> Unit) {
+fun CamerasScreen(back: () -> Unit, phoneName: String? = null) {
     val context = LocalContext.current
     val specs = rememberSpecs()
-    val known = specs?.name?.let { KnownPhones.cameras(it) }
-    // Only asked for when the maker's own specs aren't known.
-    val report by produceState<CameraReport?>(null, specs, known) {
-        if (specs != null && known == null) value = withContext(Dispatchers.IO) { CameraReader.read(context) }
+    val name = phoneName ?: specs?.name
+    var looked by remember(name) { mutableStateOf(false) }
+    val sheet by produceState<PhoneSheet?>(null, name) {
+        if (name == null) return@produceState
+        value = Graph.phoneSheets.forPhone(name) ?: KnownPhones.sheet(name)
+        looked = true
     }
+    val report by produceState<CameraReport?>(null, looked, sheet) {
+        if (looked && sheet == null) value = withContext(Dispatchers.IO) { CameraReader.read(context) }
+    }
+    val s = sheet
     val shown: List<CameraGroup>? = when {
-        known != null -> groups(known)
-        else -> report?.let { groups(it) }
+        s != null -> groups(s)
+        looked -> report?.let { groups(it) }
+        else -> null
     }
     DetailPage(
         "Cameras",
         back,
-        subtitle = shown?.takeIf { it.isNotEmpty() }?.joinToString(" · ") { g -> "${g.lenses.size} ${g.title.substringBefore(' ').lowercase(Locale.US)}" },
+        subtitle = (s?.name ?: name)?.let { n -> listOfNotNull(n, shown?.takeIf { it.isNotEmpty() }?.joinToString(" · ") { g -> "${g.lenses.size} ${g.title.substringBefore(' ').lowercase(Locale.US)}" }).joinToString(" · ") },
     ) {
         when {
             shown == null -> items(2) { ShimmerBox(Modifier.fillMaxWidth().height(200.dp)) }
@@ -255,8 +293,31 @@ fun CamerasScreen(back: () -> Unit) {
                     Text("This device has no cameras that apps can see.", style = MaterialTheme.typography.bodyMedium)
                 }
             }
-            else -> shown.forEachIndexed { i, g ->
-                item { CameraGroupCard(g, Modifier.then(if (i == 0) Modifier.sharedCard("card-cameras") else Modifier).entrance(i)) }
+            else -> {
+                shown.forEachIndexed { i, g ->
+                    item { CameraGroupCard(g, Modifier.then(if (i == 0) Modifier.sharedCard("card-cameras") else Modifier).entrance(i)) }
+                }
+                item {
+                    Text(
+                        if (s != null) "Specs from GSMArena · open the page" else "As Android shares them with apps",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (s != null) Accents.games.start else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .padding(horizontal = 6.dp)
+                            .then(
+                                if (s != null) {
+                                    Modifier.bouncyClick {
+                                        runCatching {
+                                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(s.url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                        }
+                                    }
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .padding(vertical = 8.dp),
+                    )
+                }
             }
         }
     }
@@ -270,8 +331,8 @@ private fun CameraGroupCard(g: CameraGroup, modifier: Modifier) {
         Spacer(Modifier.height(4.dp))
         g.lenses.forEach { l ->
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.width(80.dp)) {
-                    Text(l.megapixels?.let { "$it MP" } ?: "—", style = MaterialTheme.typography.titleLarge)
+                Column(Modifier.width(88.dp)) {
+                    Text(l.megapixels ?: "—", style = MaterialTheme.typography.titleLarge)
                     l.mm?.let { Text("$it mm", style = MaterialTheme.typography.labelMedium, color = accent.start) }
                 }
                 Column(Modifier.weight(1f)) {

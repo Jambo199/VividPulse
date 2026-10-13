@@ -38,6 +38,18 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # GSMArena's real pages for one phone, so the unit tests check the app still reads them.
+      - name: Fetch a GSMArena page for the tests
+        continue-on-error: true
+        run: |
+          mkdir -p ci-gsm
+          UA="Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36"
+          curl -sSL -m 30 -A "$UA" -o ci-gsm/search.html "https://www.gsmarena.com/results.php3?sQuickSearch=yes&sName=vivo+X200+Ultra" || true
+          curl -sSL -m 30 -A "$UA" -o ci-gsm/phone.html "https://www.gsmarena.com/vivo_x200_ultra-13762.php" || true
+          ls -la ci-gsm
+          echo "--- search results:"; grep -A6 'class="makers"' ci-gsm/search.html | head -12 | cut -c1-400
+          echo "--- specs on the phone page:"; grep -oE 'data-spec="[a-z0-9]+"[^>]*>[^<]{0,160}' ci-gsm/phone.html | head -60
+
       - name: Unit tests and release APK
         run: |
           chmod +x gradlew
