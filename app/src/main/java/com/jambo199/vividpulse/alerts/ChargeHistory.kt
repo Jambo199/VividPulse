@@ -25,7 +25,9 @@ object ChargeMath {
     /** Readings this close together belong to the same charge. */
     const val CONTINUE_MS = 3 * 60_000L
 
-    fun continues(last: ChargePoint?, now: Long): Boolean = last != null && now - last.at in 0..CONTINUE_MS
+    /** Same charge: a recent reading, and the battery hasn't run down since (it was unplugged and used). */
+    fun continues(last: ChargePoint?, now: Long, level: Float): Boolean =
+        last != null && now - last.at in 0..CONTINUE_MS && level >= last.level - 1f
 
     /** Alert once per charge, when it climbs past the limit (not when plugged in above it already). */
     fun shouldAlert(session: ChargeSession, limit: Int, level: Float): Boolean =
@@ -63,7 +65,7 @@ class ChargeHistory(context: Context) {
     fun record(point: ChargePoint): ChargeSession {
         val all = read().toMutableList()
         val current = all.firstOrNull()
-        val session = if (current != null && ChargeMath.continues(current.points.lastOrNull(), point.at)) {
+        val session = if (current != null && ChargeMath.continues(current.points.lastOrNull(), point.at, point.level)) {
             all.removeAt(0)
             current.copy(points = ChargeMath.thin(current.points + point, MAX_POINTS))
         } else {

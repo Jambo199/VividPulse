@@ -63,9 +63,10 @@ object PrivateDns {
 
     /** The setting as it is now (null when Android won't say). */
     fun current(context: Context): DnsState? {
-        val mode = runCatching { Settings.Global.getString(context.contentResolver, "private_dns_mode") }.getOrNull()
+        val mode = runCatching { Settings.Global.getString(context.contentResolver, "private_dns_mode") }
         val host = runCatching { Settings.Global.getString(context.contentResolver, "private_dns_specifier") }.getOrNull()
-        if (mode != null) return DnsState(mode, host?.ifBlank { null })
+        // Readable but never changed: Android's default, Automatic.
+        if (mode.isSuccess) return DnsState(mode.getOrNull() ?: DnsState.MODE_AUTO, host?.ifBlank { null })
         // Not readable: what the connection in use reports instead.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
         val cm = context.getSystemService(ConnectivityManager::class.java) ?: return null

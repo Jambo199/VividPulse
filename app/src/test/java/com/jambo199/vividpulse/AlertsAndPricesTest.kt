@@ -39,9 +39,11 @@ class AlertsAndPricesTest {
 
     @Test
     fun chargeContinuesOnlyWithRecentReadings() {
-        assertTrue(ChargeMath.continues(point(0, 50f), 2 * 60_000L))
-        assertFalse(ChargeMath.continues(point(0, 50f), 10 * 60_000L))
-        assertFalse(ChargeMath.continues(null, 0))
+        assertTrue(ChargeMath.continues(point(0, 50f), 2 * 60_000L, 51f))
+        assertFalse(ChargeMath.continues(point(0, 50f), 10 * 60_000L, 51f))
+        // Unplugged and used in between: a new charge.
+        assertFalse(ChargeMath.continues(point(0, 100f), 60_000L, 72f))
+        assertFalse(ChargeMath.continues(null, 0, 50f))
     }
 
     @Test

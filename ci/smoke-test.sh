@@ -87,11 +87,16 @@ adb shell pm grant $PKG android.permission.POST_NOTIFICATIONS 2>/dev/null || tru
 notes() { # our notifications' titles and texts
   adb shell dumpsys notification --noredact | grep -A40 "pkg=$PKG" | grep -oE "android\.(title|text)=[^)]*\)" | head -8 | sed 's/^/   /'
 }
+# The emulator starts out "plugged in" at 100%: unplug it first, so the charge starts at 72%.
+adb shell dumpsys battery set ac 0
+adb shell dumpsys battery set status 3
+adb shell dumpsys battery set level 72
+sleep 2
 open_page battery/companion; sleep 3
 swipe_up; swipe_up; shot 05-battery-companion 2
+sleep 15
 adb shell dumpsys battery set ac 1
 adb shell dumpsys battery set status 2
-adb shell dumpsys battery set level 72
 echo "-- plugged in at 72%, waiting for the charge watcher"
 for _ in $(seq 1 12); do
   sleep 10
