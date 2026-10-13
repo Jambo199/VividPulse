@@ -237,10 +237,10 @@ object KnownPhones {
                 lenses = listOf(
                     KnownLens("Main", 50, 35, "Sony LYT-818 · 1/1.28\"", "f/1.69", "Stabilised"),
                     KnownLens("Ultra-wide", 50, 14, "Sony LYT-818 · 1/1.28\"", "f/2.0", null),
-                    KnownLens("Telephoto (periscope)", 200, 85, "Samsung ISOCELL HP9 · 1/1.4\"", "f/2.27", "3.7× optical · macro from 15 cm"),
-                    KnownLens("Selfie", 50, null, null, "f/2.0", null),
+                    KnownLens("Telephoto (periscope)", 200, 85, "Samsung ISOCELL HP9 · 1/1.4\"", "f/2.27", "3.7× optical · up to 200 mm with vivo's 2.35× extender"),
+                    KnownLens("Selfie", 50, null, null, null, null),
                 ),
-                video = "4K up to 120 fps on all three back cameras · 4K 60 fps Log · Dolby Vision",
+                video = "4K up to 120 fps on all three back cameras · Dolby Vision HDR at 4K 60 fps",
             )
             else -> null
         }
