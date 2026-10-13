@@ -34,10 +34,19 @@ data class UpdateInfo(
     val notes: String,
     /** The build's list of changes, one per line. */
     val changes: List<String> = emptyList(),
+    /** Major, minor or small, when the release says. */
+    val updateSize: UpdateSize? = null,
 )
 
 /** What changed in the version that's installed now, shown once after an update. */
-data class WhatsNew(val versionName: String, val title: String, val changes: List<String>)
+data class WhatsNew(
+    val versionName: String,
+    val title: String,
+    val changes: List<String>,
+    val size: UpdateSize? = null,
+    /** Earlier updates included, when versions were skipped. */
+    val alsoIncludes: Int = 0,
+)
 
 sealed interface UpdateState {
     data object Idle : UpdateState
@@ -97,20 +106,55 @@ class UpdateManager(private val context: Context, private val scope: CoroutineSc
         (_state.value as? UpdateState.Available)?.let { _snoozed.value = it.info.versionCode }
     }
 
-    /** The notes for the version that's installed now, if this phone downloaded it through the app. */
+    /** What changed in the version that's installed now: from the changelog it came with, or the notes it was downloaded with. */
     fun whatsNew(): WhatsNew? {
+        val all = Changelog.bundled(context)
+        all.firstOrNull { it.code == BuildConfig.VERSION_CODE }?.let { mine ->
+            // Everything since the version this phone had before, when it skipped some.
+            val from = prefs.getInt("updatedFrom", -1)
+            val covered = all.filter { it.code in (from + 1)..BuildConfig.VERSION_CODE }.takeIf { from > 0 }.orEmpty().ifEmpty { listOf(mine) }
+            return WhatsNew(
+                BuildConfig.VERSION_NAME,
+                mine.title,
+                covered.flatMap { it.changes }.distinct(),
+                covered.minOf { it.size },
+                covered.size - 1,
+            )
+        }
         if (prefs.getInt("notesFor", -1) != BuildConfig.VERSION_CODE) return null
         val title = prefs.getString("notesTitle", null) ?: return null
         val changes = prefs.getString("notesChanges", "").orEmpty().lines().filter { it.isNotBlank() }
         return WhatsNew(BuildConfig.VERSION_NAME, title, changes)
     }
 
-    /** [whatsNew], but only the first time the app opens after updating. */
+    /** [whatsNew], but only the first time the app opens after an update (however it was installed). */
     fun takeWhatsNew(): WhatsNew? {
-        val notes = whatsNew() ?: return null
+        val lastRun = prefs.getInt("lastRunCode", -1)
+        prefs.edit().putInt("lastRunCode", BuildConfig.VERSION_CODE).apply()
         if (prefs.getInt("notesShown", -1) == BuildConfig.VERSION_CODE) return null
+        // Updated through the app, or opened for the first time since an update from elsewhere.
+        val updated = prefs.getInt("notesFor", -1) == BuildConfig.VERSION_CODE || lastRun in 1 until BuildConfig.VERSION_CODE
+        if (!updated) return null
+        if (lastRun in 1 until BuildConfig.VERSION_CODE) prefs.edit().putInt("updatedFrom", lastRun).apply()
+        val notes = whatsNew() ?: return null
         prefs.edit().putInt("notesShown", BuildConfig.VERSION_CODE).apply()
         return notes
+    }
+
+    /**
+     * Every version and what it changed: the list this build came with, plus any newer versions
+     * from the release page (kept for when you're offline).
+     */
+    suspend fun changelog(refresh: Boolean): List<ChangelogEntry> = withContext(Dispatchers.IO) {
+        val bundled = Changelog.bundled(context)
+        val saved = File(context.filesDir, Changelog.FILE)
+        if (refresh) {
+            runCatching { httpGetText(BuildConfig.UPDATE_BASE_URL + Changelog.FILE) }
+                .onSuccess { text -> if (Changelog.parse(text).isNotEmpty()) saved.writeText(text) }
+                .onFailure { Log.w(TAG, "Couldn't fetch the changelog", it) }
+        }
+        val fetched = runCatching { if (saved.isFile) Changelog.parse(saved.readText()) else emptyList() }.getOrDefault(emptyList())
+        Changelog.merge(bundled, fetched)
     }
 
     fun check(manual: Boolean) {
@@ -226,6 +270,7 @@ class UpdateManager(private val context: Context, private val scope: CoroutineSc
             sizeBytes = o.optLong("size"),
             notes = o.optString("notes"),
             changes = UpdateNotes.changes(o.optString("changes")),
+            updateSize = o.optString("updateSize").ifBlank { null }?.let(UpdateSize::of),
         )
     }
 

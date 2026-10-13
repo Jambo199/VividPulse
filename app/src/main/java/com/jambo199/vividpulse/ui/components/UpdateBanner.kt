@@ -38,6 +38,8 @@ import com.jambo199.vividpulse.ui.theme.Accent
 import com.jambo199.vividpulse.ui.theme.Accents
 import com.jambo199.vividpulse.update.UpdateInfo
 import com.jambo199.vividpulse.update.UpdateState
+import com.jambo199.vividpulse.ui.settings.accentFor
+import com.jambo199.vividpulse.update.UpdateSize
 import com.jambo199.vividpulse.update.WhatsNew
 
 /**
@@ -70,7 +72,7 @@ fun UpdateBanner(
             is UpdateState.Downloading -> "Downloading $version" to "${(state.progress * 100).toInt()}% · it installs when done"
             is UpdateState.Ready -> "Ready to install $version" to "Tap Install, then confirm on the next screen"
             is UpdateState.Failed -> "Update didn't finish" to state.message
-            else -> "Update available · $version" to (info?.notes?.ifBlank { null } ?: "A new version of Vivid Pulse")
+            else -> "${info?.updateSize?.label ?: "Update"} available · $version" to (info?.notes?.ifBlank { null } ?: "A new version of Vivid Pulse")
         }
         val action: String? = when (state) {
             is UpdateState.Downloading -> null
@@ -128,7 +130,7 @@ fun PillButton(text: String, accent: Accent, onClick: () -> Unit, modifier: Modi
 /** "What's new" after an update (or from Settings). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WhatsNewSheet(notes: WhatsNew, onClose: () -> Unit) {
+fun WhatsNewSheet(notes: WhatsNew, onSeeAll: (() -> Unit)? = null, onClose: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onClose,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -143,10 +145,19 @@ fun WhatsNewSheet(notes: WhatsNew, onClose: () -> Unit) {
                 Spacer(Modifier.width(14.dp))
                 Column {
                     Text("What's new", style = MaterialTheme.typography.headlineSmall)
-                    Text("Vivid Pulse ${notes.versionName}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "Vivid Pulse ${notes.versionName}" + when (notes.alsoIncludes) {
+                            0 -> ""
+                            1 -> " · and the update before it"
+                            else -> " · and the ${notes.alsoIncludes} updates before it"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
             Spacer(Modifier.height(6.dp))
+            notes.size?.let { Pill(it.label, accentFor(it), filled = it != UpdateSize.SMALL) }
             Text(notes.title, style = MaterialTheme.typography.titleMedium)
             notes.changes.forEachIndexed { i, change ->
                 Row(Modifier.entrance(i)) {
@@ -156,6 +167,14 @@ fun WhatsNewSheet(notes: WhatsNew, onClose: () -> Unit) {
             }
             Spacer(Modifier.height(10.dp))
             PillButton("Nice", Accents.brand, onClose, Modifier.fillMaxWidth())
+            if (onSeeAll != null) {
+                Text(
+                    "See every update",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Accents.brand.start,
+                    modifier = Modifier.align(Alignment.CenterHorizontally).clip(CircleShape).bouncyClick(onClick = onSeeAll).padding(horizontal = 16.dp, vertical = 10.dp),
+                )
+            }
         }
     }
 }

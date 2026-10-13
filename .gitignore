@@ -7,3 +7,4 @@ local.properties
 captures/
 .externalNativeBuild/
 .cxx/
+app/src/main/assets/changelog.json

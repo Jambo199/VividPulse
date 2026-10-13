@@ -37,6 +37,7 @@ import com.jambo199.vividpulse.BuildConfig
 import com.jambo199.vividpulse.Graph
 import com.jambo199.vividpulse.data.RefreshRate
 import com.jambo199.vividpulse.data.ThemeMode
+import com.jambo199.vividpulse.ui.Routes
 import com.jambo199.vividpulse.ui.components.CardTitle
 import com.jambo199.vividpulse.ui.components.DetailPage
 import com.jambo199.vividpulse.ui.components.GlassCard
@@ -52,7 +53,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun SettingsScreen(back: () -> Unit) {
+fun SettingsScreen(back: () -> Unit, open: (String) -> Unit = {}) {
     val settings by Graph.settings.state.collectAsStateWithLifecycle()
     val update by Graph.updates.state.collectAsStateWithLifecycle()
     var showNotes by remember { mutableStateOf(false) }
@@ -156,14 +157,27 @@ fun SettingsScreen(back: () -> Unit) {
                     Switch(settings.autoCheckUpdates, { v -> Graph.settings.update { it.copy(autoCheckUpdates = v) } })
                 }
                 val notes = remember { Graph.updates.whatsNew() }
-                if (notes != null) {
+                Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                    if (notes != null) {
+                        Text(
+                            "What's new in ${notes.versionName}",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Accents.battery.start,
+                            modifier = Modifier.clip(CircleShape).bouncyClick { showNotes = true }.padding(vertical = 8.dp),
+                        )
+                    }
                     Text(
-                        "What's new in ${notes.versionName}",
+                        "Changelog",
                         style = MaterialTheme.typography.labelLarge,
-                        color = Accents.battery.start,
-                        modifier = Modifier.padding(top = 8.dp).clip(CircleShape).bouncyClick { showNotes = true }.padding(vertical = 8.dp),
+                        color = Accents.brand.start,
+                        modifier = Modifier.clip(CircleShape).bouncyClick { open(Routes.CHANGELOG) }.padding(vertical = 8.dp),
                     )
-                    if (showNotes) WhatsNewSheet(notes) { showNotes = false }
+                }
+                if (notes != null && showNotes) {
+                    WhatsNewSheet(notes, onSeeAll = {
+                        showNotes = false
+                        open(Routes.CHANGELOG)
+                    }) { showNotes = false }
                 }
             }
         }

@@ -85,6 +85,7 @@ import com.jambo199.vividpulse.ui.live.LiveScreen
 import com.jambo199.vividpulse.ui.live.MemoryScreen
 import com.jambo199.vividpulse.ui.live.NetworkScreen
 import com.jambo199.vividpulse.ui.live.ThermalScreen
+import com.jambo199.vividpulse.ui.settings.ChangelogScreen
 import com.jambo199.vividpulse.ui.settings.SettingsScreen
 import com.jambo199.vividpulse.ui.theme.Accents
 import com.jambo199.vividpulse.ui.theme.LocalPulseColors
@@ -119,6 +120,7 @@ object Routes {
     const val FPS = "fps"
     const val SETTINGS = "settings"
     const val FREE_RAM = "freeram"
+    const val CHANGELOG = "changelog"
     fun game(appId: Int) = "game/$appId"
 }
 
@@ -187,7 +189,8 @@ fun PulseRoot(requests: MutableStateFlow<String?>) {
                     page(Routes.SCREEN) { ScreenTestScreen(back) }
                     page(Routes.TOUCH) { TouchTestScreen(back) }
                     page(Routes.FPS) { FpsScreen(back) }
-                    page(Routes.SETTINGS) { SettingsScreen(back) }
+                    page(Routes.SETTINGS) { SettingsScreen(back, open) }
+                    page(Routes.CHANGELOG) { ChangelogScreen(back) }
                     page(Routes.FREE_RAM) { FreeRamScreen(back) }
                     // Opens and starts straight away (used by the automated test).
                     page(Routes.FREE_RAM + "/start") { FreeRamScreen(back, autoStart = true) }
@@ -228,7 +231,12 @@ fun PulseRoot(requests: MutableStateFlow<String?>) {
         }
     }
     }
-    whatsNew?.let { WhatsNewSheet(it) { whatsNew = null } }
+    whatsNew?.let {
+        WhatsNewSheet(it, onSeeAll = {
+            whatsNew = null
+            open(Routes.CHANGELOG)
+        }) { whatsNew = null }
+    }
 }
 
 private fun NavGraphBuilder.page(route: String, content: @Composable (NavBackStackEntry) -> Unit) {

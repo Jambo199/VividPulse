@@ -163,6 +163,11 @@ open_page games; shot 42-light-games 4
 open_page settings; sleep 2
 tap "Dark" exact
 
+echo "== Changelog"
+open_page changelog; shot 40c-changelog 5
+swipe_up; shot 40d-changelog-scrolled 2
+swipe_up; swipe_up; shot 40e-changelog-oldest 2
+
 echo "== Landscape"
 adb shell settings put system accelerometer_rotation 0
 adb shell settings put system user_rotation 1

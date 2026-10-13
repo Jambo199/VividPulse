@@ -21,6 +21,15 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The whole history and its build tags, for the changelog.
+          fetch-depth: 0
+
+      - name: Changelog (every build and what it changed, for the app's Changelog page)
+        run: |
+          mkdir -p dist
+          python3 ci/changelog.py $((GITHUB_RUN_NUMBER + BUILD_OFFSET)) app/src/main/assets/changelog.json
+          cp app/src/main/assets/changelog.json dist/changelog.json
 
       - uses: actions/setup-java@v4
         with:
@@ -44,7 +53,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: vivid-pulse-apk
-          path: dist/*.apk
+          path: |
+            dist/*.apk
+            dist/changelog.json
 
       # The same app numbered build 1, so the emulator test can watch the in-app updater find
       # the newest build on the release page, download it and open the installer.
@@ -168,15 +179,21 @@ jobs:
         run: |
           BUILD=$((GITHUB_RUN_NUMBER + BUILD_OFFSET))
           cp dist/*.apk VividPulse.apk
-          # The commit message without its title and sign-off lines: the app's "What's new" list.
-          CHANGES=$(printf '%s\n' "$NOTES" | sed '1d' | grep -v -E '^(Co-Authored-By|Claude-Session):' || true)
+          # This build's changelog entry: everything since the last published build, which is the
+          # app's "What's new" list.
+          ENTRY=$(jq -c --argjson b "$BUILD" '[.entries[] | select(.code == $b)][0] // {}' dist/changelog.json)
+          TITLE=$(jq -r '.title // empty' <<< "$ENTRY")
+          [ -n "$TITLE" ] || TITLE="${NOTES%%$'\n'*}"
+          CHANGES=$(jq -r '(.changes // []) | map("- " + .) | join("\n")' <<< "$ENTRY")
+          UPDATE_SIZE=$(jq -r '.size // "small"' <<< "$ENTRY")
           # Read by the app's updater: build number plus a checksum it verifies after download.
           jq -n --argjson code "$BUILD" --arg name "1.0.$BUILD" \
             --arg sha "$(sha256sum VividPulse.apk | cut -d' ' -f1)" --argjson size "$(stat -c %s VividPulse.apk)" \
-            --arg notes "${NOTES%%$'\n'*}" --arg changes "$CHANGES" --arg commit "${GITHUB_SHA::7}" \
-            '{versionCode: $code, versionName: $name, apk: "VividPulse.apk", sha256: $sha, size: $size, notes: $notes, changes: $changes, commit: $commit}' > version.json
+            --arg notes "$TITLE" --arg changes "$CHANGES" --arg updateSize "$UPDATE_SIZE" --arg commit "${GITHUB_SHA::7}" \
+            '{versionCode: $code, versionName: $name, apk: "VividPulse.apk", sha256: $sha, size: $size, notes: $notes, changes: $changes, updateSize: $updateSize, commit: $commit}' > version.json
           cat version.json
-          files="VividPulse.apk version.json"
+          cp dist/changelog.json changelog.json
+          files="VividPulse.apk version.json changelog.json"
           if [ -f shots/screenshots.zip ]; then cp shots/screenshots.zip screenshots.zip; files="$files screenshots.zip"; fi
           cat > notes.md <<NOTES
           **Vivid Pulse for Android – build $BUILD** (\`${GITHUB_SHA::7}\`, emulator test: ${{ needs.emulator-test.result }})
@@ -199,3 +216,6 @@ jobs:
             echo "::warning::Couldn't publish the release. The APK is attached to this run as the vivid-pulse-apk artifact."
             exit 1
           fi
+          # Marks which commit this build was made from, so the next changelog knows where it starts.
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/v1.0.$BUILD" -f sha="$GITHUB_SHA" > /dev/null \
+            || echo "::warning::Couldn't tag build $BUILD"

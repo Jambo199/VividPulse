@@ -9,7 +9,10 @@ everywhere. Built with the vivo X200 Ultra in mind, works on any Android 8+ phon
 asked) and tap **Install**. After that it updates itself: when a new
 build is out, a card slides up above the tab bar – tap **Update**, watch it download, confirm the
 install – and the first time the new version opens it shows **what's new**. It checks when it
-opens and every few hours while it's open (Settings › Updates).
+opens and every few hours while it's open (Settings › Updates). Settings › Updates › **Changelog**
+lists every version with what it changed, each marked as a **major**, **minor** or **small** update
+(worked out from how much of the app changed, or set by the commit with an `Update-size:` line;
+`ci/changelog.py` builds the list at build time).
 
 - **Live** – CPU activity with a gauge, a smooth-scrolling chart and a bar per core; RAM in use
   (and vivo's extended RAM+); GPU load and clock where the phone allows; battery level as a

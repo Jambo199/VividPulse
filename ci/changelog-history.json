@@ -1,0 +1,68 @@
+{
+ "entries": [
+  {
+   "code": 101,
+   "title": "Vivid Pulse has its own home",
+   "size": "small",
+   "changes": [
+    "Vivid Pulse moved to its own GitHub repository (Jambo199/VividPulse) and now updates from there",
+    "Nothing else changed: your settings and starred games carry over"
+   ]
+  },
+  {
+   "code": 5,
+   "date": "2026-10-12",
+   "title": "Updates that find you, game search and more",
+   "size": "major",
+   "changes": [
+    "When a new version is out, a card slides up above the tabs: tap Update, watch it download, then confirm the install",
+    "After updating, a What's new sheet lists the changes (also in Settings)",
+    "The app checks for updates when it opens and every few hours while it's open",
+    "Search any game on Steam and see its live player count, price and page",
+    "Star games to keep their live player counts in Your games on the Games page, and share any game",
+    "Battery page: this charge at a glance (time, % gained, % per hour, peak watts, energy) or drain since unplugged",
+    "Speed test shows which Cloudflare server and provider you're on, can share the result, and taps when done",
+    "Live header shows how long the phone has been on and how much of that it slept",
+    "Option to keep the screen on while the app is open"
+   ]
+  },
+  {
+   "code": 4,
+   "date": "2026-10-12",
+   "title": "Little fixes",
+   "size": "small",
+   "changes": [
+    "Placeholder clock speeds some phones report are ignored",
+    "Deal end dates are tidier",
+    "A clear message when the phone lists no cameras"
+   ]
+  },
+  {
+   "code": 3,
+   "date": "2026-10-12",
+   "title": "Readable text everywhere, and fixes from the first screenshots",
+   "size": "minor",
+   "changes": [
+    "Text is readable everywhere on the dark theme",
+    "Clock speeds a phone hides show as hidden, not 0 MHz",
+    "Core bars stay slim whatever the number of cores",
+    "The speed test needle no longer crosses the number in the middle",
+    "Pages opened from shortcuts start fresh",
+    "Tidier player charts, HDR brightness and speed test history"
+   ]
+  },
+  {
+   "code": 2,
+   "date": "2026-10-12",
+   "title": "The first Vivid Pulse",
+   "size": "major",
+   "changes": [
+    "Live: CPU activity per core, RAM, GPU, battery (watts and temperature), heat, network speed and storage, with smooth charts, springy gauges and cards that grow into detail pages",
+    "Device: full specs, from the system and chip to display modes and HDR, cameras, sensors with live readings and features like Wi-Fi 7 and NFC",
+    "Games: Steam's top 20 most played with live player counts, weekly top sellers, deals, Epic's free games and a page for each game",
+    "Tools: speed test, smoothness meter, dead pixel and touch tests and a vibration check",
+    "Launcher shortcuts, and an updater built in"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,7 @@
+# Published builds and the commit each was built from, for builds made before the release job
+# started tagging them (v1.0.<build>).
+101 5b70517
+102 acdff2d
+104 0b65262
+105 f0de32f
+106 8800d93
