@@ -23,6 +23,18 @@ data class Settings(
     val steamCountry: String = "",
     /** Keep the screen awake while the app is open (watching a charge, temperatures…). */
     val keepScreenOn: Boolean = false,
+    /** Watches every charge: live notification, the charge limit alert and the charge history. */
+    val chargeCompanion: Boolean = false,
+    /** Alert when the battery reaches this % while charging. */
+    val chargeLimit: Int = 80,
+    /** A note in the morning saying how much the battery used overnight. */
+    val overnightReport: Boolean = false,
+    /** Alerts when a starred game goes on sale or drops to the price you set. */
+    val saleAlerts: Boolean = true,
+    /** An alert when one of Steam's big seasonal sales starts. */
+    val bigSaleAlerts: Boolean = true,
+    /** Your GG.deals API key, for prices at other stores and key sellers. */
+    val ggDealsKey: String = "",
 )
 
 class SettingsStore(context: Context) {
@@ -41,6 +53,12 @@ class SettingsStore(context: Context) {
             .putBoolean("autoCheckUpdates", next.autoCheckUpdates)
             .putString("steamCountry", next.steamCountry)
             .putBoolean("keepScreenOn", next.keepScreenOn)
+            .putBoolean("chargeCompanion", next.chargeCompanion)
+            .putInt("chargeLimit", next.chargeLimit)
+            .putBoolean("overnightReport", next.overnightReport)
+            .putBoolean("saleAlerts", next.saleAlerts)
+            .putBoolean("bigSaleAlerts", next.bigSaleAlerts)
+            .putString("ggDealsKey", next.ggDealsKey.trim())
             .apply()
     }
 
@@ -53,6 +71,12 @@ class SettingsStore(context: Context) {
             autoCheckUpdates = prefs.getBoolean("autoCheckUpdates", d.autoCheckUpdates),
             steamCountry = prefs.getString("steamCountry", d.steamCountry).orEmpty(),
             keepScreenOn = prefs.getBoolean("keepScreenOn", d.keepScreenOn),
+            chargeCompanion = prefs.getBoolean("chargeCompanion", d.chargeCompanion),
+            chargeLimit = prefs.getInt("chargeLimit", d.chargeLimit),
+            overnightReport = prefs.getBoolean("overnightReport", d.overnightReport),
+            saleAlerts = prefs.getBoolean("saleAlerts", d.saleAlerts),
+            bigSaleAlerts = prefs.getBoolean("bigSaleAlerts", d.bigSaleAlerts),
+            ggDealsKey = prefs.getString("ggDealsKey", d.ggDealsKey).orEmpty(),
         )
     }
 

@@ -91,6 +91,8 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     implementation(libs.coil.compose)
+    // Background checks: charging, the overnight report, sale alerts and the widgets.
+    implementation(libs.androidx.work.runtime)
     implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(libs.junit)

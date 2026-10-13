@@ -1,6 +1,5 @@
 package com.jambo199.vividpulse
 
-import com.jambo199.vividpulse.games.Epic
 import com.jambo199.vividpulse.games.Html
 import com.jambo199.vividpulse.games.Steam
 import org.junit.Assert.assertEquals
@@ -105,37 +104,6 @@ class GamesParsingTest {
     @Test
     fun steamOnline() {
         assertEquals(38_123_456L to 12_345_678L, Steam.parseOnline("""{"users_online":"38,123,456","users_ingame":"12,345,678"}"""))
-    }
-
-    @Test
-    fun epicFreeNowAndComingNext() {
-        val now = Instant.parse("2025-10-12T12:00:00Z").toEpochMilli()
-        val json = """{"data":{"Catalog":{"searchStore":{"elements":[
-            {"title":"Coming Game","description":"Soon","productSlug":"coming-game",
-             "keyImages":[{"type":"Thumbnail","url":"https://x/t.jpg"}],
-             "promotions":{"promotionalOffers":[],"upcomingPromotionalOffers":[{"promotionalOffers":[
-                {"startDate":"2025-10-16T15:00:00.000Z","endDate":"2025-10-23T15:00:00.000Z","discountSetting":{"discountType":"PERCENTAGE","discountPercentage":0}}]}]}},
-            {"title":"Free Game","description":"Free Game","productSlug":null,
-             "catalogNs":{"mappings":[{"pageSlug":"free-game-1a2b","pageType":"productHome"}]},
-             "keyImages":[{"type":"OfferImageWide","url":"https://x/wide.jpg"},{"type":"Thumbnail","url":"https://x/t.jpg"}],
-             "price":{"totalPrice":{"fmtPrice":{"originalPrice":"£15.99","discountPrice":"0"}}},
-             "promotions":{"promotionalOffers":[{"promotionalOffers":[
-                {"startDate":"2025-10-09T15:00:00.000Z","endDate":"2025-10-16T15:00:00.000Z","discountSetting":{"discountType":"PERCENTAGE","discountPercentage":0}}]}],"upcomingPromotionalOffers":[]}},
-            {"title":"Just On Sale","productSlug":"sale",
-             "promotions":{"promotionalOffers":[{"promotionalOffers":[
-                {"startDate":"2025-10-09T15:00:00.000Z","endDate":"2025-10-16T15:00:00.000Z","discountSetting":{"discountType":"PERCENTAGE","discountPercentage":50}}]}]}},
-            {"title":"No Promotion","promotions":null}]}}}}"""
-        val games = Epic.parseFreeGames(json, now)
-        assertEquals(listOf("Free Game", "Coming Game"), games.map { it.title })
-        val free = games[0]
-        assertTrue(free.freeNow)
-        assertEquals("https://store.epicgames.com/p/free-game-1a2b", free.url)
-        assertEquals("https://x/wide.jpg", free.imageUrl)
-        assertEquals("£15.99", free.originalPrice)
-        assertEquals("", free.description)
-        assertEquals(Instant.parse("2025-10-16T15:00:00Z").toEpochMilli(), free.endsAt)
-        assertFalse(games[1].freeNow)
-        assertEquals("https://store.epicgames.com/p/coming-game", games[1].url)
     }
 
     @Test

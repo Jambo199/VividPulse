@@ -4,4 +4,8 @@
     <string name="shortcut_speed">Speed test</string>
     <string name="shortcut_games">Steam charts</string>
     <string name="shortcut_battery">Battery</string>
+    <string name="widget_vitals_name">Vitals</string>
+    <string name="widget_vitals_description">Battery, charging power, temperature and RAM at a glance</string>
+    <string name="widget_deals_name">Steam deals</string>
+    <string name="widget_deals_description">Today\'s top Steam deals and the next big Steam sale</string>
 </resources>

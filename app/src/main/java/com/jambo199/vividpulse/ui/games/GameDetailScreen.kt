@@ -88,7 +88,7 @@ private const val PLAYERS_EVERY_MS = 15_000L
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
-fun GameDetailScreen(appId: Int, back: () -> Unit) {
+fun GameDetailScreen(appId: Int, back: () -> Unit, open: (String) -> Unit = {}) {
     val context = LocalContext.current
     val known = remember(appId) { Graph.games.known(appId) }
     val detail by produceState<Result<GameDetail?>?>(null, appId) {
@@ -138,6 +138,30 @@ fun GameDetailScreen(appId: Int, back: () -> Unit) {
                     if (makers != null) Text(makers, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(10.dp))
                     PriceLine(d?.price ?: known?.price, d?.originalPrice ?: known?.originalPrice, d?.discountPercent ?: known?.discountPercent ?: 0)
+                }
+            }
+            // Free games have nothing to compare.
+            val free = d?.free == true || known?.priceCents == 0L
+            if (name.isNotBlank() && !free) {
+                item {
+                    PriceCompareCard(
+                        appId,
+                        name,
+                        d?.priceCents ?: known?.priceCents,
+                        d?.price ?: known?.price,
+                        open,
+                        Modifier.padding(horizontal = 16.dp).entrance(1),
+                    )
+                }
+            }
+            if (watched && !free) {
+                item {
+                    PriceAlertCard(
+                        appId,
+                        d?.regularCents ?: d?.priceCents ?: known?.priceCents,
+                        d?.currency,
+                        Modifier.padding(horizontal = 16.dp).entrance(1),
+                    )
                 }
             }
             item {

@@ -42,11 +42,23 @@ lists every version with what it changed, each marked as a **major**, **minor** 
 - **Games** – Steam's **top 100 most played** right now with live player counts, today's peak and
   how each moved since last week; this week's **top 100 sellers**; **deals** that keep loading as
   you scroll, sorted by popularity, players, biggest discount or reviews; the **most anticipated**
-  games not out yet; and **free games**: Epic's giveaways now and next, plus anything free to keep
-  on Steam. **Search** any game on Steam. Tap a game for its page: live players with a
-  chart, price and discount, genres, Metacritic, screenshots, share, and buttons to open it in
-  Steam or see its player history. **Star** a game to keep its live player count in *Your games*
-  at the top of the page.
+  games not out yet; and **free games**: anything free to keep on Steam plus the most played
+  free-to-play games. A countdown to Steam's next big sale. **Search** any game on Steam. Tap a game
+  for its page: live players with a chart, price and discount, **cheaper elsewhere** (the cheapest
+  official store and key seller from GG.deals, with a free key you add in Settings, plus one-tap
+  searches on AllKeyShop, CDKeys, Eneba, Kinguin, Instant Gaming, G2A, Fanatical, Humble and Green
+  Man Gaming), genres, Metacritic, screenshots, share, and buttons to open it in Steam or see its
+  player history. **Star** a game to keep its live player count in *Your games* and get a **price
+  alert** when it goes on sale or drops below a price you pick (on Steam, or anywhere).
+- **Charging companion** – a live notification while charging (level, watts, time to your limit
+  and to full), an alert at 80, 85, 90 or 95%, a history of every charge with its curve, and a
+  morning report of how much the battery used overnight.
+- **Widgets** – Vitals (battery, charging power, temperature, RAM) and Steam deals (today's top
+  three and the next big sale), with previews and one-tap adding in Settings.
+- **Private DNS** – pick Cloudflare, Google, Quad9, AdGuard (blocks ads) and more for the whole
+  phone, with each server's response time from where you are. One tap to switch once a computer
+  has granted the permission (`adb shell pm grant com.jambo199.vividpulse
+  android.permission.WRITE_SECURE_SETTINGS`); until then it copies the name and opens the setting.
 - **Free up RAM** – asks Android to make room and shows every step as it happens: how memory
   stands, tidying the app itself, briefly holding a large block of memory so Android drops cached
   files, compresses idle memory into RAM+ and closes apps you haven't used in a while, handing it
@@ -83,7 +95,9 @@ last; set the `SIGNING_*` environment variables to use your own key.
 | Where | What |
 |---|---|
 | `app/.../system/` | Readers for CPU, RAM, GPU, battery, heat, network, storage, display, cameras, sensors; `LiveMonitor` samples them while the app is open |
-| `app/.../games/` | Steam charts, search and store pages, Epic free games, starred games |
+| `app/.../games/` | Steam charts, search and store pages, GG.deals prices, sale calendar, starred games and their alerts |
+| `app/.../alerts/` | Background work: charging companion, overnight report, sale alerts, notifications |
+| `app/.../widget/` | The home screen widgets |
 | `app/.../tools/` | Speed test against Cloudflare |
 | `app/.../update/` | The in-app updater |
 | `app/.../ui/` | Screens; animated gauges, live charts and cards in `ui/components/` |

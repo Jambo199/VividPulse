@@ -70,5 +70,16 @@ object Format {
 
     fun watts(w: Float): String = String.format(Locale.US, if (abs(w) >= 10) "%.1f W" else "%.2f W", w)
 
+    /** 7 → "7 min", 75 → "1 h 15 min". */
+    fun minutes(m: Int): String = when {
+        m < 60 -> "$m min"
+        m % 60 == 0 -> "${m / 60} h"
+        else -> "${m / 60} h ${m % 60} min"
+    }
+
+    /** The time of day, the way the phone shows it (14:05 or 2:05 pm). */
+    fun clock(epochMs: Long): String =
+        java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date(epochMs))
+
     private fun trim(s: String): String = if (s.contains('.')) s.trimEnd('0').trimEnd('.') else s
 }

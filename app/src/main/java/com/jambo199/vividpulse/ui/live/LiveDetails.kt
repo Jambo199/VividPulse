@@ -304,7 +304,7 @@ private fun MemoryBar(label: String, fraction: Float, value: String, accent: Acc
 }
 
 @Composable
-fun BatteryScreen(back: () -> Unit) {
+fun BatteryScreen(back: () -> Unit, turnOnCompanion: Boolean = false) {
     val live by Graph.monitor.state.collectAsStateWithLifecycle()
     val settings by Graph.settings.state.collectAsStateWithLifecycle()
     val b = live?.battery ?: BatterySample.EMPTY
@@ -363,6 +363,8 @@ fun BatteryScreen(back: () -> Unit) {
         live?.session?.let { s ->
             item { SessionCard(s, Modifier.entrance(3)) }
         }
+        item { ChargingCompanionCard(b.cycles, Modifier.entrance(3), turnOn = turnOnCompanion) }
+        item { RecentChargesCard(Modifier.entrance(3)) }
         item {
             GlassCard(Modifier.fillMaxWidth().entrance(4)) {
                 Text("Details", style = MaterialTheme.typography.titleMedium)

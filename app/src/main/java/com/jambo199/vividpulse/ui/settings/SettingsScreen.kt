@@ -104,7 +104,7 @@ fun SettingsScreen(back: () -> Unit, open: (String) -> Unit = {}) {
             GlassCard(Modifier.fillMaxWidth().entrance(3), accent = Accents.games) {
                 CardTitle(Icons.Rounded.Public, "Store region", Accents.games)
                 Text(
-                    "Which country's Steam and Epic prices to show.",
+                    "Which country's Steam prices to show.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp, bottom = 12.dp),
@@ -116,6 +116,9 @@ fun SettingsScreen(back: () -> Unit, open: (String) -> Unit = {}) {
                 }
             }
         }
+        item { AlertsCard(open, Modifier.entrance(3)) }
+        item { PriceComparisonCard(Modifier.entrance(3)) }
+        item { WidgetsCard(Modifier.entrance(3)) }
         item {
             GlassCard(Modifier.fillMaxWidth().entrance(4), accent = Accents.battery) {
                 CardTitle(Icons.Rounded.SystemUpdate, "Updates", Accents.battery)
@@ -183,7 +186,7 @@ fun SettingsScreen(back: () -> Unit, open: (String) -> Unit = {}) {
         }
         item {
             Text(
-                "Vivid Pulse reads your phone's sensors and system files on the phone itself; nothing about your phone leaves it. Game charts come from Steam and the Epic Games Store; the speed test uses Cloudflare.",
+                "Vivid Pulse reads your phone's sensors and system files on the phone itself; nothing about your phone leaves it. Game charts come from Steam, price comparisons from GG.deals (with your key); the speed test uses Cloudflare.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 6.dp).entrance(5),

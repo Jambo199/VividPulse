@@ -1,6 +1,10 @@
 package com.jambo199.vividpulse
 
 import android.app.Application
+import com.jambo199.vividpulse.alerts.Background
+import com.jambo199.vividpulse.alerts.BatteryLog
+import com.jambo199.vividpulse.alerts.ChargeHistory
+import com.jambo199.vividpulse.alerts.Notify
 import com.jambo199.vividpulse.data.SettingsStore
 import com.jambo199.vividpulse.games.GamesRepository
 import com.jambo199.vividpulse.games.WatchStore
@@ -16,6 +20,9 @@ class PulseApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         Graph.init(this)
+        Notify.channels(this)
+        // Background checks: hourly battery notes, deal alerts, and the charge watcher if it's on.
+        runCatching { Background.schedule(this) }
     }
 }
 
@@ -31,6 +38,8 @@ object Graph {
     val watching by lazy { WatchStore(app) }
     val booster by lazy { RamBooster(app, scope) }
     val updates by lazy { UpdateManager(app, scope) }
+    val chargeHistory by lazy { ChargeHistory(app) }
+    val batteryLog by lazy { BatteryLog(app) }
 
     private val specsLazy = lazy { DeviceSpecs(app, monitor.cpu) }
 

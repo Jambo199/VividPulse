@@ -17,7 +17,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.jambo199.vividpulse.widget.Widgets
 
 class MainActivity : ComponentActivity() {
     /** A page to open, from a launcher shortcut or the automated test ("route" extra). */
@@ -42,6 +45,15 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 Graph.monitor.run { Graph.settings.current.refresh.ms }
+            }
+        }
+        // Keeps the vitals widget current while the app is open.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    withContext(Dispatchers.IO) { Widgets.updateVitals(this@MainActivity) }
+                    delay(20_000)
+                }
             }
         }
         Graph.updates.checkOnLaunch(Graph.settings.current.autoCheckUpdates)

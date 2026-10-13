@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jambo199.vividpulse.Graph
 import com.jambo199.vividpulse.games.Chart
-import com.jambo199.vividpulse.games.EpicGame
 import com.jambo199.vividpulse.games.Game
 import com.jambo199.vividpulse.games.friendlyMessage
 import kotlinx.coroutines.CancellationException
@@ -24,7 +23,7 @@ enum class GamesTab(val label: String, val chart: Chart?) {
     TOP_SELLERS("Top sellers", Chart.TOP_SELLERS),
     DEALS("Deals", Chart.DEALS),
     UPCOMING("Most anticipated", Chart.UPCOMING),
-    /** Epic's giveaways and anything free to keep on Steam. */
+    /** Paid games free to keep on Steam right now, and the most played free-to-play games. */
     FREE("Free games", null),
 }
 
@@ -81,8 +80,6 @@ class GamesViewModel : ViewModel() {
     private val _dealSort = MutableStateFlow(DealSort.POPULAR)
     val dealSort: StateFlow<DealSort> = _dealSort.asStateFlow()
     private val filling = mutableMapOf<Chart, Job>()
-    private val _epic = MutableStateFlow(ListState(repo.cachedEpic()))
-    val epic: StateFlow<ListState<EpicGame>> = _epic.asStateFlow()
 
     private val _online = MutableStateFlow<Pair<Long, Long>?>(null)
     val online: StateFlow<Pair<Long, Long>?> = _online.asStateFlow()
@@ -167,12 +164,22 @@ class GamesViewModel : ViewModel() {
                     error = null,
                 )
                 fillPlayers(chart)
+                fillBest(chart)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 // Leave it there; scrolling back down tries again.
                 flow.value = flow.value.copy(loadingMore = false, error = e.friendlyMessage())
             }
+        }
+    }
+
+    /** Other stores' prices for the deals, so cheaper ones elsewhere stand out (with a GG.deals key). */
+    private fun fillBest(chart: Chart) {
+        if (chart != Chart.DEALS || !repo.canCompare) return
+        val flow = charts.getValue(chart)
+        viewModelScope.launch {
+            runCatching { repo.fillBestPrices(chart) { list -> flow.value = flow.value.copy(items = list.games) } }
         }
     }
 
@@ -197,20 +204,9 @@ class GamesViewModel : ViewModel() {
     private fun load(t: GamesTab, force: Boolean) {
         val chart = t.chart
         if (chart == null) {
-            // Free games: Epic's giveaways, plus anything free to keep on Steam.
+            // Free games: giveaways on Steam, and the free-to-play games from the most played chart.
             loadChart(Chart.FREE_TO_KEEP, force)
-            val flow = _epic
-            if (flow.value.loading) return
-            flow.value = flow.value.copy(loading = true, error = null)
-            viewModelScope.launch {
-                flow.value = try {
-                    ListState(repo.epicFree(force), fetchedAt = System.currentTimeMillis())
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    flow.value.copy(loading = false, error = e.friendlyMessage())
-                }
-            }
+            loadChart(Chart.MOST_PLAYED, force)
             return
         }
         loadChart(chart, force)
@@ -229,7 +225,10 @@ class GamesViewModel : ViewModel() {
             } catch (e: Exception) {
                 flow.value.copy(loading = false, error = e.friendlyMessage())
             }
-            if (flow.value.error == null) fillPlayers(chart)
+            if (flow.value.error == null) {
+                fillPlayers(chart)
+                fillBest(chart)
+            }
         }
     }
 

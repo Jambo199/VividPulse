@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CleaningServices
+import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.GridOn
 import androidx.compose.material.icons.rounded.Sensors
 import androidx.compose.material.icons.rounded.Speed
@@ -55,6 +56,7 @@ fun ToolsScreen(open: (String) -> Unit) {
     val tools = listOf(
         Tool("Speed test", "Download, upload and response time", Icons.Rounded.Speed, Accents.games, Routes.SPEED),
         Tool("Free up RAM", "Watch Android make room, step by step", Icons.Rounded.CleaningServices, Accents.memory, Routes.FREE_RAM),
+        Tool("Private DNS", "Faster lookups, block ads, one tap", Icons.Rounded.Dns, Accents.cpu, Routes.DNS),
         Tool("Smoothness", "Frame rate and dropped frames", Icons.Rounded.Animation, Accents.download, Routes.FPS),
         Tool("Dead pixels", "Full-screen colours to spot faults", Icons.Rounded.GridOn, Accents.upload, Routes.SCREEN),
         Tool("Touch test", "Draw with every finger at once", Icons.Rounded.TouchApp, Accents.cpu, Routes.TOUCH),

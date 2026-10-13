@@ -33,7 +33,17 @@ data class Game(
     val reviewLabel: String? = null,
     val reviewCount: Long? = null,
     val reviewPercent: Int? = null,
+    /** The cheapest prices at other stores and key sellers (with a GG.deals key). */
+    val elsewhere: BestPrices? = null,
 ) {
+    /** The cheapest price somewhere other than Steam, when it beats Steam's. */
+    val cheaperElsewhere: Long?
+        get() {
+            val best = elsewhere?.bestCents ?: return null
+            val steam = priceCents ?: return null
+            return best.takeIf { it < steam }
+        }
+
     /** Places climbed (+) or dropped (−) since last week; null when new. */
     val rankChange: Int? get() = lastWeekRank?.takeIf { it > 0 }?.let { it - rank }
 
@@ -62,6 +72,10 @@ data class GameDetail(
     val reviews: Long?,
     val screenshots: List<String>,
     val controller: String?,
+    /** The price now and before any discount, in cents, and the currency (e.g. "GBP"). */
+    val priceCents: Long? = null,
+    val regularCents: Long? = null,
+    val currency: String? = null,
 )
 
 /** A store listing's name, picture and price. */
@@ -367,6 +381,9 @@ object Steam {
             reviews = d.optJSONObject("recommendations")?.optLong("total", 0)?.takeIf { it > 0 },
             screenshots = d.optJSONArray("screenshots")?.let { a -> (0 until a.length()).mapNotNull { a.getJSONObject(it).optString("path_full").ifBlank { null } } }.orEmpty(),
             controller = d.optString("controller_support").ifBlank { null },
+            priceCents = if (free) 0L else price?.optLong("final", -1)?.takeIf { it >= 0 },
+            regularCents = if (free) 0L else price?.optLong("initial", -1)?.takeIf { it >= 0 },
+            currency = price?.optString("currency")?.ifBlank { null },
         )
     }
 

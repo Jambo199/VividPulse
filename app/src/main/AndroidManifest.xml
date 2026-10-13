@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Steam / Epic game lists, the speed test and app updates. -->
+    <!-- Steam game lists and prices, the speed test and app updates. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Connection type, Wi-Fi standard, band and signal on the Network page. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -9,6 +10,14 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- The vibration motor test. -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Charge limit, overnight report and sale alerts. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Asking to be left alone by battery saving, so charge alerts arrive on time (vivo). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Switching Private DNS. Only works once granted from a computer (adb), never by itself. -->
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <application
         android:name=".PulseApplication"
@@ -33,6 +42,30 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
         </activity>
+
+        <receiver
+            android:name=".widget.VitalsWidget"
+            android:exported="false"
+            android:label="@string/widget_vitals_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_vitals_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.DealsWidget"
+            android:exported="false"
+            android:label="@string/widget_deals_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_deals_info" />
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

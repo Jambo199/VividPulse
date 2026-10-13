@@ -33,20 +33,59 @@ enum class Chart(val label: String, val search: StoreSearch? = null) {
 data class GameList(val games: List<Game>, val fetchedAt: Long, val nextStart: Int? = null, val source: StoreSearch? = null)
 
 /**
- * Fetches Steam's charts and Epic's free games, keeping the last good copy of each on disk so
+ * Fetches Steam's charts, keeping the last good copy of each on disk so
  * the page has something to show offline.
  */
 class GamesRepository(context: Context) {
     private val dir = File(context.cacheDir, "games").apply { mkdirs() }
     private val memory = java.util.concurrent.ConcurrentHashMap<Chart, GameList>()
     private val lock = Mutex()
-    private var epicMemory: Pair<List<EpicGame>, Long>? = null
     private val known = java.util.concurrent.ConcurrentHashMap<Int, Game>()
     /** Games Steam has no player count for (not out yet, or not a game). */
     private val noPlayers = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
 
     /** A game we've listed already, so its page can show the name and picture straight away. */
     fun known(appId: Int): Game? = known[appId]
+
+    private val bestCache = java.util.concurrent.ConcurrentHashMap<Int, Pair<BestPrices, Long>>()
+
+    /** Whether a GG.deals key has been entered, so other stores' prices can be shown. */
+    val canCompare: Boolean get() = Graph.settings.current.ggDealsKey.isNotBlank()
+
+    /** Store listings (price, discount) for any games, in this country. */
+    suspend fun storeItems(ids: List<Int>): Map<Int, StoreItem> = withContext(Dispatchers.IO) { itemsFor(ids) }
+
+    /**
+     * The cheapest prices at other stores and key sellers, from GG.deals (empty without a key).
+     * Kept for half an hour; [force] fetches again. Throws when GG.deals refuses, e.g. a wrong key.
+     */
+    suspend fun bestPrices(ids: List<Int>, force: Boolean = false): Map<Int, BestPrices> = withContext(Dispatchers.IO) {
+        val key = Graph.settings.current.ggDealsKey.trim()
+        if (key.isEmpty() || ids.isEmpty()) return@withContext emptyMap()
+        val now = System.currentTimeMillis()
+        val fresh: Map<Int, BestPrices> = if (force) emptyMap() else ids.mapNotNull { id -> bestCache[id]?.takeIf { now - it.second < BEST_FRESH_MS }?.let { id to it.first } }.toMap()
+        val missing = ids.filter { it !in fresh }.distinct()
+        val fetched = missing.chunked(GgDeals.MAX_IDS).flatMap { chunk ->
+            Log.i(TAG, "GG.deals prices for ${chunk.size} games")
+            GgDeals.parse(Http.get(GgDeals.pricesUrl(chunk, key, GgDeals.region(country)))).entries
+        }.associate { it.key to it.value }
+        fetched.forEach { (id, p) -> bestCache[id] = p to now }
+        fresh + fetched
+    }
+
+    /** Adds other stores' prices to a chart's games, for comparing with Steam's. */
+    suspend fun fillBestPrices(chart: Chart, onUpdate: (GameList) -> Unit): Unit = withContext(Dispatchers.IO) {
+        if (!canCompare) return@withContext
+        val ids = memory[chart]?.games.orEmpty().filter { it.elsewhere == null }.map { it.appId }
+        if (ids.isEmpty()) return@withContext
+        val best = runCatching { bestPrices(ids) }.onFailure { Log.w(TAG, "GG.deals prices failed", it) }.getOrNull() ?: return@withContext
+        if (best.isEmpty()) return@withContext
+        val updated = lock.withLock {
+            val current = memory[chart] ?: return@withContext
+            current.copy(games = current.games.map { g -> best[g.appId]?.let { g.copy(elsewhere = it) } ?: g }).also { memory[chart] = it }
+        }
+        onUpdate(updated)
+    }
 
     val country: String
         get() = Graph.settings.current.steamCountry.ifBlank { Locale.getDefault().country }.ifBlank { "US" }.uppercase(Locale.US)
@@ -207,14 +246,6 @@ class GamesRepository(context: Context) {
         runCatching { Steam.parseOnline(Http.get("https://www.valvesoftware.com/about/stats")) }.getOrNull()
     }
 
-    fun cachedEpic(): List<EpicGame>? = epicMemory?.first
-
-    suspend fun epicFree(force: Boolean): List<EpicGame> = withContext(Dispatchers.IO) {
-        val have = epicMemory
-        if (!force && have != null && System.currentTimeMillis() - have.second < FRESH_MS) return@withContext have.first
-        Epic.parseFreeGames(Http.get(Epic.freeGamesUrl(country))).also { epicMemory = it to System.currentTimeMillis() }
-    }
-
     private fun cacheFile(chart: Chart) = File(dir, "${chart.name.lowercase(Locale.US)}.json")
 
     private fun writeCache(chart: Chart, list: GameList) {
@@ -270,6 +301,7 @@ class GamesRepository(context: Context) {
     companion object {
         private const val TAG = "Games"
         private const val FRESH_MS = 5 * 60_000L
+        private const val BEST_FRESH_MS = 30 * 60_000L
         /** Store search results per page. */
         private const val PAGE = 50
         /** Games per IStoreBrowseService/GetItems request. */

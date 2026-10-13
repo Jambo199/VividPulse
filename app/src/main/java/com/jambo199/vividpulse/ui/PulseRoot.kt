@@ -89,6 +89,7 @@ import com.jambo199.vividpulse.ui.settings.ChangelogScreen
 import com.jambo199.vividpulse.ui.settings.SettingsScreen
 import com.jambo199.vividpulse.ui.theme.Accents
 import com.jambo199.vividpulse.ui.theme.LocalPulseColors
+import com.jambo199.vividpulse.ui.tools.DnsScreen
 import com.jambo199.vividpulse.ui.tools.FpsScreen
 import com.jambo199.vividpulse.ui.tools.FreeRamScreen
 import com.jambo199.vividpulse.ui.tools.ScreenTestScreen
@@ -121,6 +122,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val FREE_RAM = "freeram"
     const val CHANGELOG = "changelog"
+    const val DNS = "dns"
     fun game(appId: Int) = "game/$appId"
 }
 
@@ -180,6 +182,8 @@ fun PulseRoot(requests: MutableStateFlow<String?>) {
                     page(Routes.CPU) { CpuScreen(back) }
                     page(Routes.MEMORY) { MemoryScreen(back, open) }
                     page(Routes.BATTERY) { BatteryScreen(back) }
+                    // Opens with the charging companion turned on (from Settings, and the automated test).
+                    page(Routes.BATTERY + "/companion") { BatteryScreen(back, turnOnCompanion = true) }
                     page(Routes.NETWORK) { NetworkScreen(back, open) }
                     page(Routes.THERMAL) { ThermalScreen(back) }
                     page(Routes.DISPLAY) { DisplayScreen(back, open) }
@@ -191,6 +195,7 @@ fun PulseRoot(requests: MutableStateFlow<String?>) {
                     page(Routes.FPS) { FpsScreen(back) }
                     page(Routes.SETTINGS) { SettingsScreen(back, open) }
                     page(Routes.CHANGELOG) { ChangelogScreen(back) }
+                    page(Routes.DNS) { DnsScreen(back) }
                     page(Routes.FREE_RAM) { FreeRamScreen(back) }
                     // Opens and starts straight away (used by the automated test).
                     page(Routes.FREE_RAM + "/start") { FreeRamScreen(back, autoStart = true) }
@@ -199,7 +204,7 @@ fun PulseRoot(requests: MutableStateFlow<String?>) {
                         arguments = listOf(navArgument("appId") { type = NavType.IntType }),
                     ) { e ->
                         CompositionLocalProvider(LocalPageScope provides this) {
-                            GameDetailScreen(e.arguments?.getInt("appId") ?: 0, back)
+                            GameDetailScreen(e.arguments?.getInt("appId") ?: 0, back, open)
                         }
                     }
                 }

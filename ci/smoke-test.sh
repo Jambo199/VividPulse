@@ -82,6 +82,40 @@ for page in cpu memory battery network thermal; do
   open_page "$page"; shot "04-$page" 4
 done
 
+echo "== Charging companion (a charge simulated with dumpsys battery)"
+adb shell pm grant $PKG android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+notes() { # our notifications' titles and texts
+  adb shell dumpsys notification --noredact | grep -A40 "pkg=$PKG" | grep -oE "android\.(title|text)=[^)]*\)" | head -8 | sed 's/^/   /'
+}
+open_page battery/companion; sleep 3
+swipe_up; swipe_up; shot 05-battery-companion 2
+adb shell dumpsys battery set ac 1
+adb shell dumpsys battery set status 2
+adb shell dumpsys battery set level 72
+echo "-- plugged in at 72%, waiting for the charge watcher"
+for _ in $(seq 1 12); do
+  sleep 10
+  if adb shell dumpsys notification --noredact | grep -A40 "pkg=$PKG" | grep -q "Charging"; then break; fi
+done
+notes
+adb shell dumpsys jobscheduler | grep -E "vividpulse" | grep -iE "JOB|charging|satisf" | head -6
+adb shell dumpsys battery set level 81
+sleep 40
+echo "-- at 81% (alert at 80%):"
+notes
+adb shell cmd statusbar expand-notifications; sleep 2
+adb exec-out screencap -p > "$OUT/05b-charging-notifications.png" && echo "📸 05b-charging-notifications"
+adb shell cmd statusbar collapse
+adb shell dumpsys battery set ac 0
+adb shell dumpsys battery set status 3
+sleep 15
+echo "-- unplugged:"
+notes
+adb shell dumpsys battery reset
+open_page battery; sleep 2
+swipe_up; swipe_up; swipe_up; shot 05c-battery-recent-charges 3
+adb logcat -d | grep -E "WM-|ChargeWorker|DealsWorker" | grep -vE " [VD] " | tail -10
+
 echo "== Device"
 open_page device; shot 10-device 4
 texts
@@ -133,6 +167,8 @@ fi
 open_page "game/730"; shot 25-game-detail 8
 swipe_up; shot 26-game-detail-scrolled 3
 open_page "game/1086940"; shot 27-game-detail-2 8
+swipe_up; shot 27b-game-detail-2-prices 2
+open_page "games/free"; shot 28-games-free 8
 
 echo "== Tools"
 open_page tools; shot 30-tools 3
@@ -157,6 +193,8 @@ adb shell input keyevent KEYCODE_BACK
 echo "== Settings and light theme"
 open_page settings; shot 40-settings 3
 swipe_up; shot 40b-settings-more 2
+swipe_up; shot 40c-settings-alerts 2
+swipe_up; shot 40d-settings-widgets 4
 tap "Light" exact && sleep 1
 open_page live; shot 41-light-live 5
 open_page games; shot 42-light-games 4
@@ -167,6 +205,22 @@ echo "== Changelog"
 open_page changelog; shot 40c-changelog 5
 swipe_up; shot 40d-changelog-scrolled 2
 swipe_up; swipe_up; shot 40e-changelog-oldest 2
+
+echo "== Private DNS"
+open_page dns; shot 44-dns 10
+texts
+echo "-- with the permission a computer grants once (adb):"
+adb shell pm grant $PKG android.permission.WRITE_SECURE_SETTINGS
+open_page tools; sleep 1
+open_page dns; sleep 6
+if tap "Cloudflare" exact; then
+  sleep 2
+  echo "   private_dns: $(adb shell settings get global private_dns_mode) $(adb shell settings get global private_dns_specifier)"
+  shot 44b-dns-cloudflare 2
+fi
+tap "Automatic" exact && sleep 2
+echo "   private_dns after Automatic: $(adb shell settings get global private_dns_mode)"
+adb shell settings put global private_dns_mode opportunistic
 
 echo "== Landscape"
 adb shell settings put system accelerometer_rotation 0

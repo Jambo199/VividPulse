@@ -71,7 +71,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.jambo199.vividpulse.games.Chart
-import com.jambo199.vividpulse.games.EpicGame
+import com.jambo199.vividpulse.games.Steam
+import com.jambo199.vividpulse.games.SteamSales
 import com.jambo199.vividpulse.games.Game
 import com.jambo199.vividpulse.ui.Routes
 import com.jambo199.vividpulse.ui.TabBottomPadding
@@ -99,7 +100,6 @@ fun GamesScreen(open: (String) -> Unit) {
     val online by vm.online.collectAsStateWithLifecycle()
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val chartState = tab.chart?.let { vm.chart(it).collectAsStateWithLifecycle().value }
-    val epicState by vm.epic.collectAsStateWithLifecycle()
     val steamFree by vm.chart(Chart.FREE_TO_KEEP).collectAsStateWithLifecycle()
     val dealSort by vm.dealSort.collectAsStateWithLifecycle()
     val asked by GamesViewModel.asked.collectAsStateWithLifecycle()
@@ -109,7 +109,8 @@ fun GamesScreen(open: (String) -> Unit) {
     LaunchedEffect(tab, dealSort) {
         if (listState.firstVisibleItemIndex > 4) listState.scrollToItem(0)
     }
-    val refreshing = chartState?.loading ?: epicState.loading
+    val mostPlayed by vm.chart(Chart.MOST_PLAYED).collectAsStateWithLifecycle()
+    val refreshing = chartState?.loading ?: steamFree.loading
     var searching by rememberSaveable { mutableStateOf(false) }
     val query by vm.query.collectAsStateWithLifecycle()
     val results by vm.results.collectAsStateWithLifecycle()
@@ -123,7 +124,7 @@ fun GamesScreen(open: (String) -> Unit) {
     Box(Modifier.fillMaxSize()) {
         AmbientGlow(listOf(Accents.games, Accents.upload, Accents.download), Modifier.fillMaxWidth().height(380.dp))
         PullToRefreshBox(
-            isRefreshing = refreshing && (chartState?.items ?: epicState.items) != null,
+            isRefreshing = refreshing && (chartState?.items ?: steamFree.items) != null,
             onRefresh = { vm.refresh() },
             modifier = Modifier.fillMaxSize(),
         ) {
@@ -176,13 +177,14 @@ fun GamesScreen(open: (String) -> Unit) {
                         else -> items(4) { ShimmerBox(Modifier.fillMaxWidth().height(80.dp)) }
                     }
                 } else {
+                item { SaleBanner(Modifier.entrance(1)) { vm.select(GamesTab.DEALS) } }
                 if (watching.isNotEmpty()) {
                     item { YourGames(watching, watchPlayers, Modifier.entrance(1)) { open(Routes.game(it)) } }
                 }
                 item { TabPicker(tab, Modifier.entrance(1)) { vm.select(it) } }
                 item {
-                    val at = chartState?.fetchedAt ?: epicState.fetchedAt
-                    val error = chartState?.error ?: epicState.error.takeIf { tab.chart == null }
+                    val at = chartState?.fetchedAt ?: steamFree.fetchedAt
+                    val error = chartState?.error ?: steamFree.error.takeIf { tab.chart == null }
                     Text(
                         when {
                             error != null && at != null -> "$error · showing ${ago(at)}'s list"
@@ -232,14 +234,6 @@ fun GamesScreen(open: (String) -> Unit) {
                         else -> items(6) { i -> ShimmerBox(Modifier.fillMaxWidth().height(if (i < 3) 190.dp else 80.dp)) }
                     }
                 } else {
-                    item { Heading("FREE ON EPIC") }
-                    val games = epicState.items
-                    when {
-                        games != null && games.isEmpty() -> item { Hint("Epic isn't giving anything away right now.") }
-                        games != null -> itemsIndexed(games, key = { _, g -> g.url }) { i, g -> EpicCard(g, Modifier.entrance(i + 2)) }
-                        epicState.error != null -> item { ErrorCard(epicState.error ?: "") { vm.refresh() } }
-                        else -> items(2) { ShimmerBox(Modifier.fillMaxWidth().height(260.dp)) }
-                    }
                     item { Heading("FREE TO KEEP ON STEAM") }
                     val steam = steamFree.items
                     when {
@@ -251,15 +245,53 @@ fun GamesScreen(open: (String) -> Unit) {
                         steamFree.error != null -> item { ErrorCard(steamFree.error ?: "") { vm.refresh() } }
                         else -> items(2) { ShimmerBox(Modifier.fillMaxWidth().height(80.dp)) }
                     }
+                    item { Heading("MOST PLAYED FREE-TO-PLAY") }
+                    val freeToPlay = mostPlayed.items?.filter { it.priceCents == 0L || it.price.equals("Free", ignoreCase = true) }
+                    when {
+                        freeToPlay != null && freeToPlay.isNotEmpty() -> itemsIndexed(freeToPlay, key = { _, g -> "f2p-${g.appId}" }) { i, g ->
+                            GameRow(g, GamesTab.MOST_PLAYED, false, Modifier.entrance(if (i < 6) i + 5 else 5), place = i + 1) { open(Routes.game(g.appId)) }
+                        }
+                        mostPlayed.error != null -> item { ErrorCard(mostPlayed.error ?: "") { vm.refresh() } }
+                        else -> items(3) { ShimmerBox(Modifier.fillMaxWidth().height(80.dp)) }
+                    }
                 }
                 }
                 item {
                     Text(
-                        "Charts from Steam and the Epic Games Store, refreshed when you open them.",
+                        "Charts from Steam, refreshed when you open them.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
                     )
+                }
+            }
+        }
+    }
+}
+
+/** Steam's big sale: on now, or a countdown to the next. */
+@Composable
+private fun SaleBanner(modifier: Modifier, onClick: () -> Unit) {
+    val now = remember { java.time.Instant.now() }
+    val on = SteamSales.current(now)
+    val sale = on ?: SteamSales.next(now) ?: return
+    val zone = java.time.ZoneId.systemDefault()
+    fun date(i: java.time.Instant) = java.time.format.DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()).format(i.atZone(zone))
+    val days = java.time.Duration.between(now, if (on != null) sale.end else sale.start).toDays()
+    GlassCard(modifier.fillMaxWidth(), accent = Accents.upload, onClick = onClick, padding = 14.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(if (on != null) "${sale.name} is on" else "Next: ${sale.name}", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    if (on != null) "Until ${date(sale.end)} · tap for the deals" else "Starts ${date(sale.start)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(if (days < 1) "Today" else "$days", style = MaterialTheme.typography.headlineSmall.merge(Numbers), color = Accents.upload.start)
+                if (days >= 1) {
+                    Text(if (on != null) "days left" else if (days == 1L) "day to go" else "days to go", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -356,6 +388,14 @@ private fun GameRow(g: Game, tab: GamesTab, history: Boolean, modifier: Modifier
                             Text(it, style = MaterialTheme.typography.bodySmall.copy(textDecoration = TextDecoration.LineThrough), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+                    g.cheaperElsewhere?.let { c ->
+                        Text(
+                            "${Steam.money(c, g.elsewhere?.currency)} " + if (g.elsewhere?.bestIsKeyshop == true) "at a key seller" else "at another store",
+                            style = MaterialTheme.typography.labelMedium.merge(Numbers),
+                            fontWeight = FontWeight.Bold,
+                            color = Accents.storage.start,
+                        )
+                    }
                     val more = dealLine(g)
                     if (more.isNotEmpty()) {
                         Text(more, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -427,54 +467,6 @@ fun GameImage(url: String, appId: Int, modifier: Modifier, shared: Boolean = tru
         // Only one picture per game on screen may fly to its page.
         modifier = (if (shared) modifier.sharedPicture("game-$appId") else modifier).background(LocalPulseColors.current.track),
     )
-}
-
-@Composable
-private fun EpicCard(g: EpicGame, modifier: Modifier) {
-    val context = LocalContext.current
-    GlassCard(
-        modifier.fillMaxWidth(),
-        accent = if (g.freeNow) Accents.battery else Accents.games,
-        padding = 0.dp,
-        onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(g.url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } },
-    ) {
-        Box {
-            AsyncImage(
-                model = ImageRequest.Builder(context).data(g.imageUrl).crossfade(250).build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(LocalPulseColors.current.track),
-            )
-            Row(Modifier.align(Alignment.TopStart).padding(12.dp)) {
-                Pill(if (g.freeNow) "FREE NOW" else "COMING SOON", if (g.freeNow) Accents.battery else Accents.games)
-            }
-        }
-        Column(Modifier.padding(16.dp)) {
-            Text(g.title, style = MaterialTheme.typography.titleLarge)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val ends = g.endsAt
-                val starts = g.startsAt
-                Text(
-                    when {
-                        g.freeNow && ends != null -> "Free until ${day(ends)}"
-                        !g.freeNow && starts != null -> "Free from ${day(starts)}"
-                        else -> "Free"
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (g.freeNow) Accents.battery.start else Accents.games.start,
-                )
-                g.originalPrice?.let {
-                    Spacer(Modifier.width(8.dp))
-                    Text(it, style = MaterialTheme.typography.bodySmall.copy(textDecoration = TextDecoration.LineThrough), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            if (g.description.isNotBlank()) {
-                Spacer(Modifier.height(6.dp))
-                Text(g.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis)
-            }
-        }
-    }
 }
 
 /** The search box: a glowing pill that takes the keyboard straight away. */
