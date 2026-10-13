@@ -78,6 +78,7 @@ import com.jambo199.vividpulse.ui.device.DisplayScreen
 import com.jambo199.vividpulse.ui.device.SensorsScreen
 import com.jambo199.vividpulse.ui.games.GameDetailScreen
 import com.jambo199.vividpulse.ui.games.GamesScreen
+import com.jambo199.vividpulse.ui.games.GamesViewModel
 import com.jambo199.vividpulse.ui.live.BatteryScreen
 import com.jambo199.vividpulse.ui.live.CpuScreen
 import com.jambo199.vividpulse.ui.live.LiveScreen
@@ -130,7 +131,13 @@ fun PulseRoot(requests: MutableStateFlow<String?>) {
         requests.collect { r ->
             if (r == null) return@collect
             requests.value = null
-            if (isTab(r)) {
+            // "games/deals" or "games/deals/discount": the Games page on that list, in that order.
+            if (r.startsWith("games/") && GamesViewModel.ask(r.removePrefix("games/"))) {
+                nav.navigate(Tab.GAMES.route) {
+                    popUpTo(Tab.LIVE.route)
+                    launchSingleTop = true
+                }
+            } else if (isTab(r)) {
                 nav.navigate(r) {
                     popUpTo(Tab.LIVE.route)
                     launchSingleTop = true

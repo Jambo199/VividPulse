@@ -92,6 +92,18 @@ jobs:
           probe "https://www.valvesoftware.com/about/stats"
           probe "https://store-site-backend-static-ipv4.ak.epicgames.com/freeGamesPromotions?locale=en-US&country=GB&allowCountries=GB" 1200
           probe "https://store.steampowered.com/api/storesearch/?term=elden%20ring&l=english&cc=GB" 900
+          search() { # a store search page: how many results, rows and the first games on it
+            echo "--- store search: $1"
+            curl -sS -m 30 -A "VividPulse-CI" "https://store.steampowered.com/search/results/?$1&category1=998&start=0&count=50&infinite=1&cc=GB&l=english" \
+              | python3 -c 'import json,re,sys; o=json.load(sys.stdin); h=o.get("results_html",""); ids=re.findall(r"data-ds-appid=\"(\d+)\"",h); print("total", o.get("total_count"), "rows", h.count("class=\"search_result_row"), "games", len(ids), ids[:8])' \
+              || echo "(failed)"
+          }
+          search "specials=1&filter=topsellers"
+          search "filter=popularcomingsoon"
+          search "maxprice=free&specials=1"
+          # Reviews and release dates from GetItems: a released game and an upcoming one.
+          items='{"ids":[{"appid":1086940},{"appid":2215430}],"context":{"language":"english","country_code":"GB","steam_realm":1},"data_request":{"include_assets":true,"include_basic_info":true,"include_release":true,"include_reviews":true}}'
+          probe "https://api.steampowered.com/IStoreBrowseService/GetItems/v1/?input_json=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$items")" 4000
           probe "https://speed.cloudflare.com/meta" 600
           probe "https://speed.cloudflare.com/cdn-cgi/trace" 400
 
@@ -109,7 +121,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back emulated -camera-front emulated
           script: bash ci/smoke-test.sh "$(ls dist/*.apk | head -1)" screenshots "$(ls dist-old/*.apk | head -1)"
 
       - name: Pack screenshots

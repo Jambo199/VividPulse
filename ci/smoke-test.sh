@@ -88,19 +88,31 @@ texts
 swipe_up; shot 11-device-scrolled 2
 swipe_up; shot 12-device-more 2
 open_page display; shot 13-display 4
-open_page cameras; shot 14-cameras 4
+open_page cameras; shot 14-cameras 5
+swipe_up; shot 14b-cameras-scrolled 2
 open_page sensors; shot 15-sensors 3
 tap "Accelerometer" && shot 16-sensor-live 3
 
 echo "== Games"
+fling_up() { for _ in $(seq 1 "$1"); do adb shell input swipe 540 1900 540 300 120; sleep 0.4; done; }
 open_page games; shot 20-games 12
 texts
 swipe_up; shot 21-games-scrolled 2
-for t in "Top sellers" "Deals" "Free on Epic"; do
-  open_page games; sleep 1
-  swipe_down; swipe_down; sleep 1
-  tap "$t" && shot "22-games-${t// /-}" 8
+# The whole most played chart, not just the top 20.
+fling_up 14; shot 21b-games-most-played-end 4
+for t in top-sellers deals upcoming free; do
+  open_page "games/$t"; shot "22-games-$t" 10
 done
+echo "-- deals in each order, and scrolling on into more pages"
+for o in players discount rated; do
+  open_page "games/deals/$o"; shot "22-deals-$o" 8
+done
+open_page "games/deals/popular"; sleep 2
+fling_up 16; shot 22-deals-more-pages 8
+fling_up 10; shot 22-deals-more-pages-2 8
+open_page "games/upcoming"; sleep 2
+fling_up 6; shot 22-upcoming-scrolled 6
+open_page "games/most-played"; sleep 1
 echo "-- search and watch a game"
 open_page games; sleep 1
 swipe_down; swipe_down; sleep 1

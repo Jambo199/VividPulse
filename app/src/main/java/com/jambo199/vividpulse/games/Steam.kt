@@ -3,6 +3,9 @@ package com.jambo199.vividpulse.games
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.NumberFormat
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.util.Currency
 import java.util.Locale
 
@@ -22,6 +25,14 @@ data class Game(
     val weeksOnChart: Int? = null,
     /** When a deal ends (epoch seconds). */
     val dealEnds: Long? = null,
+    /** The price in cents, for sorting by price. */
+    val priceCents: Long? = null,
+    /** "Coming 2026", "12 Mar 2026" for games not out yet. */
+    val release: String? = null,
+    /** Steam reviews: "Very Positive", how many and % positive. */
+    val reviewLabel: String? = null,
+    val reviewCount: Long? = null,
+    val reviewPercent: Int? = null,
 ) {
     /** Places climbed (+) or dropped (−) since last week; null when new. */
     val rankChange: Int? get() = lastWeekRank?.takeIf { it > 0 }?.let { it - rank }
@@ -61,7 +72,58 @@ data class StoreItem(
     val price: String?,
     val originalPrice: String?,
     val discountPercent: Int,
-)
+    val priceCents: Long? = null,
+    val dealEnds: Long? = null,
+    val release: String? = null,
+    val reviewLabel: String? = null,
+    val reviewCount: Long? = null,
+    val reviewPercent: Int? = null,
+) {
+    /** A game from this listing, in place [rank]. */
+    fun toGame(rank: Int) = Game(
+        appId = appId,
+        name = name,
+        imageUrl = imageUrl,
+        rank = rank,
+        price = price,
+        originalPrice = originalPrice,
+        discountPercent = discountPercent,
+        dealEnds = dealEnds,
+        priceCents = priceCents,
+        release = release,
+        reviewLabel = reviewLabel,
+        reviewCount = reviewCount,
+        reviewPercent = reviewPercent,
+    )
+
+    /** [g] with this listing's name, picture, price and reviews filled in. */
+    fun fill(g: Game) = g.copy(
+        name = name,
+        imageUrl = imageUrl,
+        price = price,
+        originalPrice = originalPrice,
+        discountPercent = discountPercent,
+        dealEnds = dealEnds ?: g.dealEnds,
+        priceCents = priceCents,
+        release = release ?: g.release,
+        reviewLabel = reviewLabel,
+        reviewCount = reviewCount,
+        reviewPercent = reviewPercent,
+    )
+}
+
+/** One page of a store search. */
+data class SearchPage(val appIds: List<Int>, val rows: Int, val total: Int)
+
+/** Steam store searches the app pages through. */
+enum class StoreSearch(val query: String) {
+    /** Games on sale, in the order the store ranks them (best sellers first). */
+    DEALS("specials=1&filter=topsellers"),
+    /** The most anticipated games that aren't out yet. */
+    UPCOMING("filter=popularcomingsoon"),
+    /** Paid games that are free to keep for now. */
+    FREE_TO_KEEP("maxprice=free&specials=1"),
+}
 
 /** Steam's public web API and store endpoints, and parsers for what they return. */
 object Steam {
@@ -76,18 +138,42 @@ object Steam {
         val input = JSONObject()
             .put("ids", JSONArray(appIds.map { JSONObject().put("appid", it) }))
             .put("context", context(country))
-            .put("data_request", JSONObject().put("include_assets", true).put("include_basic_info", true))
+            .put("data_request", DATA_REQUEST())
         return "$API/IStoreBrowseService/GetItems/v1/?input_json=" + Http.encode(input.toString())
     }
 
-    fun topSellersUrl(country: String, count: Int = 20): String {
+    fun topSellersUrl(country: String, count: Int = 100): String {
         val input = JSONObject()
             .put("country_code", country)
             .put("context", context(country))
-            .put("data_request", JSONObject().put("include_assets", true).put("include_basic_info", true))
+            .put("data_request", DATA_REQUEST())
             .put("page_start", 0)
             .put("page_count", count)
         return "$API/IStoreTopSellersService/GetWeeklyTopSellers/v1/?input_json=" + Http.encode(input.toString())
+    }
+
+    @Suppress("FunctionName")
+    private fun DATA_REQUEST() = JSONObject()
+        .put("include_assets", true)
+        .put("include_basic_info", true)
+        .put("include_release", true)
+        .put("include_reviews", true)
+
+    /** A page of store search results ([StoreSearch]), games only. */
+    fun storeSearchUrl(kind: StoreSearch, start: Int, count: Int, country: String) =
+        "https://store.steampowered.com/search/results/?${kind.query}&category1=998&start=$start&count=$count&infinite=1&cc=$country&l=english"
+
+    /**
+     * A store search page: its games in order (bundles, which list several apps, are left out), how
+     * many rows the page had, bundles included, so the next page starts after them, and how many
+     * results there are in all.
+     */
+    fun parseSearchPage(json: String): SearchPage {
+        val o = JSONObject(json)
+        val html = o.optString("results_html")
+        val ids = Regex("data-ds-appid=\"(\\d+)\"").findAll(html).map { it.groupValues[1].toInt() }.distinct().toList()
+        val rows = Regex("class=\"search_result_row").findAll(html).count().coerceAtLeast(ids.size)
+        return SearchPage(ids, rows, o.optInt("total_count", rows))
     }
 
     fun featuredUrl(country: String) = "https://store.steampowered.com/api/featuredcategories?cc=$country&l=english"
@@ -164,6 +250,9 @@ object Steam {
         val name = o.optString("name").ifBlank { return null }
         val purchase = o.optJSONObject("best_purchase_option")
         val free = o.optBoolean("is_free", false)
+        val release = o.optJSONObject("release")
+        val reviews = o.optJSONObject("reviews")?.let { it.optJSONObject("summary_filtered") ?: it.optJSONObject("summary_unfiltered") }
+        val comingSoon = release?.optBoolean("is_coming_soon") == true
         return StoreItem(
             appId = appId,
             name = name,
@@ -171,7 +260,28 @@ object Steam {
             price = if (free) "Free" else purchase?.optString("formatted_final_price")?.ifBlank { null },
             originalPrice = purchase?.optString("formatted_original_price")?.ifBlank { null },
             discountPercent = purchase?.optInt("discount_pct", 0) ?: 0,
+            priceCents = if (free) 0L else purchase?.optString("final_price_in_cents")?.toLongOrNull(),
+            dealEnds = purchase?.optJSONArray("active_discounts")?.optJSONObject(0)?.optLong("discount_end_date", 0)?.takeIf { it > 0 },
+            release = if (comingSoon) releaseText(release) else null,
+            reviewLabel = reviews?.optString("review_score_label")?.ifBlank { null },
+            reviewCount = reviews?.optLong("review_count", 0)?.takeIf { it > 0 },
+            reviewPercent = reviews?.optInt("percent_positive", -1)?.takeIf { it >= 0 },
         )
+    }
+
+    /** When a game that isn't out yet arrives: the store's own words if it has them, else the date. */
+    private fun releaseText(r: JSONObject?): String? {
+        r ?: return null
+        r.optString("custom_release_date_message").ifBlank { null }?.let { return it }
+        val at = r.optLong("steam_release_date", 0).takeIf { it > 0 } ?: return "Coming soon"
+        // Release dates are days, stored as midnight UTC.
+        val d = Instant.ofEpochSecond(at).atZone(ZoneOffset.UTC).toLocalDate()
+        return when (r.optString("coming_soon_display")) {
+            "date_year" -> d.year.toString()
+            "date_quarter" -> "Q${(d.monthValue - 1) / 3 + 1} ${d.year}"
+            "date_month" -> DateTimeFormatter.ofPattern("MMM yyyy", Locale.UK).format(d)
+            else -> DateTimeFormatter.ofPattern("d MMM yyyy", Locale.UK).format(d)
+        }
     }
 
     /** "steam/apps/730/${FILENAME}?t=1" with "header.jpg" → the picture's full address. */
@@ -189,17 +299,15 @@ object Steam {
             val r = ranks.getJSONObject(i)
             val item = r.optJSONObject("item")?.let(::parseItem)
             val appId = r.optInt("appid", item?.appId ?: 0)
-            Game(
+            val g = Game(
                 appId = appId,
-                name = item?.name.orEmpty(),
-                imageUrl = item?.imageUrl ?: headerFallback(appId),
+                name = "",
+                imageUrl = headerFallback(appId),
                 rank = r.optInt("rank", i + 1),
                 lastWeekRank = r.optInt("last_week_rank", 0).takeIf { it > 0 },
-                price = item?.price,
-                originalPrice = item?.originalPrice,
-                discountPercent = item?.discountPercent ?: 0,
                 weeksOnChart = r.optInt("consecutive_weeks", 0).takeIf { it > 0 },
-            ) to item
+            )
+            (item?.fill(g) ?: g) to item
         }.filter { it.first.appId > 0 }
     }
 
@@ -224,6 +332,7 @@ object Steam {
                 originalPrice = if (o.optBoolean("discounted") && original > 0) money(original, currency) else null,
                 discountPercent = o.optInt("discount_percent", 0),
                 dealEnds = o.optLong("discount_expiration", 0).takeIf { it > 0 },
+                priceCents = final.takeIf { it >= 0 },
             )
         }.mapIndexed { i, g -> g.copy(rank = i + 1) }
     }

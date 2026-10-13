@@ -7,7 +7,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -15,14 +17,17 @@ import org.json.JSONObject
 import java.io.File
 import java.util.Locale
 
-/** The charts the Games page shows. */
-enum class Chart(val label: String) {
+/** The charts the Games page shows. [search] is the store search that pages through it, if any. */
+enum class Chart(val label: String, val search: StoreSearch? = null) {
     MOST_PLAYED("Most played"),
     TOP_SELLERS("Top sellers"),
-    DEALS("Deals"),
+    DEALS("Deals", StoreSearch.DEALS),
+    UPCOMING("Most anticipated", StoreSearch.UPCOMING),
+    FREE_TO_KEEP("Free to keep on Steam", StoreSearch.FREE_TO_KEEP),
 }
 
-data class GameList(val games: List<Game>, val fetchedAt: Long)
+/** A chart as far as it's loaded; [nextStart] is where the next page starts, null at the end. */
+data class GameList(val games: List<Game>, val fetchedAt: Long, val nextStart: Int? = null)
 
 /**
  * Fetches Steam's charts and Epic's free games, keeping the last good copy of each on disk so
@@ -30,9 +35,12 @@ data class GameList(val games: List<Game>, val fetchedAt: Long)
  */
 class GamesRepository(context: Context) {
     private val dir = File(context.cacheDir, "games").apply { mkdirs() }
-    private val memory = mutableMapOf<Chart, GameList>()
+    private val memory = java.util.concurrent.ConcurrentHashMap<Chart, GameList>()
+    private val lock = Mutex()
     private var epicMemory: Pair<List<EpicGame>, Long>? = null
     private val known = java.util.concurrent.ConcurrentHashMap<Int, Game>()
+    /** Games Steam has no player count for (not out yet, or not a game). */
+    private val noPlayers = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
 
     /** A game we've listed already, so its page can show the name and picture straight away. */
     fun known(appId: Int): Game? = known[appId]
@@ -49,36 +57,103 @@ class GamesRepository(context: Context) {
     suspend fun chart(chart: Chart, force: Boolean): GameList = withContext(Dispatchers.IO) {
         val have = memory[chart]
         if (!force && have != null && System.currentTimeMillis() - have.fetchedAt < FRESH_MS) return@withContext have
-        val games = when (chart) {
-            Chart.MOST_PLAYED -> mostPlayed()
-            Chart.TOP_SELLERS -> topSellers()
-            Chart.DEALS -> Steam.parseFeatured(Http.get(Steam.featuredUrl(country)), "specials").take(LIMIT)
+        val now = System.currentTimeMillis()
+        val list = when (chart) {
+            Chart.MOST_PLAYED -> GameList(mostPlayed(), now)
+            Chart.TOP_SELLERS -> GameList(topSellers(), now)
+            Chart.DEALS -> runCatching { storePage(Chart.DEALS, 0, 0) }
+                .onFailure { Log.w(TAG, "Store search failed, using the featured specials", it) }
+                .getOrNull()?.takeIf { it.games.isNotEmpty() }
+                ?: GameList(Steam.parseFeatured(Http.get(Steam.featuredUrl(country)), "specials"), now)
+            Chart.UPCOMING, Chart.FREE_TO_KEEP -> storePage(chart, 0, 0)
         }
-        if (games.isEmpty()) throw java.io.IOException("Steam sent an empty list")
-        games.forEach { known[it.appId] = it }
-        GameList(games, System.currentTimeMillis()).also {
-            memory[chart] = it
-            writeCache(chart, it)
+        // Nothing free to keep is normal; an empty chart isn't.
+        if (list.games.isEmpty() && chart != Chart.FREE_TO_KEEP) throw java.io.IOException("Steam sent an empty list")
+        list.games.forEach { known[it.appId] = it }
+        lock.withLock {
+            // Keep live player counts we already had until fresh ones arrive.
+            val old = memory[chart]?.games?.associate { it.appId to it.playersNow }.orEmpty()
+            list.copy(games = list.games.map { g -> if (g.playersNow == null) g.copy(playersNow = old[g.appId]) else g })
+                .also { memory[chart] = it }
+        }.also { writeCache(chart, it) }
+    }
+
+    /** The next page of a chart that has one ([GameList.nextStart]), added to what's loaded. */
+    suspend fun more(chart: Chart): GameList? = withContext(Dispatchers.IO) {
+        val have = memory[chart] ?: return@withContext null
+        val start = have.nextStart ?: return@withContext have
+        if (chart.search == null || have.games.size >= MAX_LISTED) return@withContext have.copy(nextStart = null)
+        val page = storePage(chart, start, have.games.size)
+        page.games.forEach { known.putIfAbsent(it.appId, it) }
+        lock.withLock {
+            val current = memory[chart] ?: have
+            val seen = current.games.mapTo(HashSet()) { it.appId }
+            val added = page.games.filter { seen.add(it.appId) }
+            val games = current.games + added.mapIndexed { i, g -> g.copy(rank = current.games.size + i + 1) }
+            current.copy(games = games, nextStart = page.nextStart?.takeIf { games.size < MAX_LISTED }).also { memory[chart] = it }
+        }.also { writeCache(chart, it) }
+    }
+
+    /**
+     * Fills in how many are playing each game on [chart] that doesn't have a count yet, a batch at
+     * a time, handing over the list after each batch so the page fills in as it goes.
+     */
+    suspend fun fillPlayers(chart: Chart, onUpdate: (GameList) -> Unit): Unit = withContext(Dispatchers.IO) {
+        val todo = memory[chart]?.games.orEmpty()
+            .filter { it.playersNow == null && it.release == null && it.appId !in noPlayers }
+            .map { it.appId }
+        if (todo.isEmpty()) return@withContext
+        val gate = Semaphore(8)
+        for (batch in todo.chunked(16)) {
+            val counts = coroutineScope { batch.map { id -> async { gate.withPermit { id to playersNow(id) } } }.awaitAll() }
+            counts.filter { it.second == null }.forEach { noPlayers += it.first }
+            val found = counts.mapNotNull { (id, n) -> n?.let { id to it } }.toMap()
+            if (found.isEmpty()) continue
+            val updated = lock.withLock {
+                val current = memory[chart] ?: return@withContext
+                current.copy(games = current.games.map { g -> found[g.appId]?.let { g.copy(playersNow = it) } ?: g })
+                    .also { memory[chart] = it }
+            }
+            onUpdate(updated)
         }
+        memory[chart]?.let { writeCache(chart, it) }
+    }
+
+    /** One page of a store search chart, ranked on from [after]. */
+    private suspend fun storePage(chart: Chart, start: Int, after: Int): GameList {
+        val kind = chart.search ?: error("$chart isn't a store search")
+        val page = Steam.parseSearchPage(Http.get(Steam.storeSearchUrl(kind, start, PAGE, country)))
+        val items = itemsFor(page.appIds)
+        // Keep the store's order; anything it can't describe in this country is left out.
+        val games = page.appIds.mapNotNull { items[it] }.mapIndexed { i, item -> item.toGame(after + i + 1) }
+        val next = start + page.rows
+        Log.i(TAG, "$chart from $start: ${games.size} games of ${page.appIds.size} (${page.rows} rows, ${page.total} in all)")
+        return GameList(games, System.currentTimeMillis(), next.takeIf { page.rows > 0 && it < page.total })
+    }
+
+    /** Store listings for any number of games, a few requests at once. */
+    private suspend fun itemsFor(ids: List<Int>): Map<Int, StoreItem> = coroutineScope {
+        ids.chunked(ITEMS_PER_CALL)
+            .map { chunk -> async { runCatching { Steam.parseItems(Http.get(Steam.itemsUrl(chunk, country))) }.getOrDefault(emptyMap()) } }
+            .awaitAll()
+            .fold(emptyMap()) { all, part -> all + part }
     }
 
     private suspend fun mostPlayed(): List<Game> = coroutineScope {
-        val chart = Steam.parseMostPlayed(Http.get(Steam.mostPlayedUrl())).take(LIMIT)
-        val items = async { runCatching { Steam.parseItems(Http.get(Steam.itemsUrl(chart.map { it.appId }, country))) }.getOrDefault(emptyMap()) }
+        val chart = Steam.parseMostPlayed(Http.get(Steam.mostPlayedUrl()))
+        val items = async { itemsFor(chart.map { it.appId }) }
         val gate = Semaphore(6)
-        val players = chart.map { g -> async { gate.withPermit { playersNow(g.appId) } } }
+        // Counts for the top of the chart now; the rest fill in while you look ([fillPlayers]).
+        val players = chart.take(PLAYERS_FIRST).map { g -> async { gate.withPermit { playersNow(g.appId) } } }
         val named = items.await()
+        // A few apps aren't in the store's listing (tools, betas): look those up one at a time.
+        val extra = chart.filter { it.appId !in named }.take(10)
+            .map { g -> async { gate.withPermit { g.appId to runCatching { storeItemFromDetails(g.appId) }.getOrNull() } } }
+            .awaitAll().toMap()
         val counts = players.awaitAll()
         chart.mapIndexed { i, g ->
-            val item = named[g.appId] ?: runCatching { storeItemFromDetails(g.appId) }.getOrNull()
-            g.copy(
-                name = item?.name ?: "App ${g.appId}",
-                imageUrl = item?.imageUrl ?: g.imageUrl,
-                price = item?.price,
-                originalPrice = item?.originalPrice,
-                discountPercent = item?.discountPercent ?: 0,
-                playersNow = counts[i],
-            )
+            val item = named[g.appId] ?: extra[g.appId]
+            (item?.fill(g) ?: g.copy(name = "App ${g.appId}")).copy(playersNow = counts.getOrNull(i))
         }
     }
 
@@ -87,24 +162,12 @@ class GamesRepository(context: Context) {
             .onFailure { Log.w(TAG, "Weekly top sellers failed, using the store's list", it) }
             .getOrNull()
         if (ranked.isNullOrEmpty()) {
-            return Steam.parseFeatured(Http.get(Steam.featuredUrl(country)), "top_sellers").take(LIMIT)
+            return Steam.parseFeatured(Http.get(Steam.featuredUrl(country)), "top_sellers")
         }
-        val games = ranked.take(LIMIT)
-        val missing = games.filter { it.second == null }.map { it.first.appId }
-        val named = if (missing.isEmpty()) emptyMap() else runCatching { Steam.parseItems(Http.get(Steam.itemsUrl(missing, country))) }.getOrDefault(emptyMap())
-        return games.map { (g, item) ->
-            if (item != null) {
-                g
-            } else {
-                val n = named[g.appId]
-                g.copy(
-                    name = n?.name ?: g.name.ifBlank { "App ${g.appId}" },
-                    imageUrl = n?.imageUrl ?: g.imageUrl,
-                    price = n?.price,
-                    originalPrice = n?.originalPrice,
-                    discountPercent = n?.discountPercent ?: 0,
-                )
-            }
+        val missing = ranked.filter { it.second == null }.map { it.first.appId }
+        val named = if (missing.isEmpty()) emptyMap() else itemsFor(missing)
+        return ranked.map { (g, item) ->
+            if (item != null) g else named[g.appId]?.fill(g) ?: g.copy(name = g.name.ifBlank { "App ${g.appId}" })
         }
     }
 
@@ -151,8 +214,12 @@ class GamesRepository(context: Context) {
                     .put("lastWeekRank", g.lastWeekRank ?: 0).put("playersNow", g.playersNow ?: -1).put("peakToday", g.peakToday ?: -1)
                     .put("price", g.price ?: "").put("originalPrice", g.originalPrice ?: "").put("discountPercent", g.discountPercent)
                     .put("weeksOnChart", g.weeksOnChart ?: 0).put("dealEnds", g.dealEnds ?: 0)
+                    .put("priceCents", g.priceCents ?: -1).put("release", g.release ?: "")
+                    .put("reviewLabel", g.reviewLabel ?: "").put("reviewCount", g.reviewCount ?: 0).put("reviewPercent", g.reviewPercent ?: -1)
             })
-            cacheFile(chart).writeText(JSONObject().put("fetchedAt", list.fetchedAt).put("games", a).toString())
+            cacheFile(chart).writeText(
+                JSONObject().put("fetchedAt", list.fetchedAt).put("nextStart", list.nextStart ?: -1).put("games", a).toString(),
+            )
         }
     }
 
@@ -175,15 +242,28 @@ class GamesRepository(context: Context) {
                     discountPercent = g.optInt("discountPercent"),
                     weeksOnChart = g.optInt("weeksOnChart").takeIf { it > 0 },
                     dealEnds = g.optLong("dealEnds").takeIf { it > 0 },
+                    priceCents = g.optLong("priceCents", -1).takeIf { it >= 0 },
+                    release = g.optString("release").ifBlank { null },
+                    reviewLabel = g.optString("reviewLabel").ifBlank { null },
+                    reviewCount = g.optLong("reviewCount").takeIf { it > 0 },
+                    reviewPercent = g.optInt("reviewPercent", -1).takeIf { it >= 0 },
                 )
             },
             o.getLong("fetchedAt"),
+            o.optInt("nextStart", -1).takeIf { it >= 0 },
         )
     }.getOrNull()
 
     companion object {
         private const val TAG = "Games"
-        const val LIMIT = 20
         private const val FRESH_MS = 5 * 60_000L
+        /** Store search results per page. */
+        private const val PAGE = 50
+        /** Games per IStoreBrowseService/GetItems request. */
+        private const val ITEMS_PER_CALL = 50
+        /** Live player counts fetched with the chart itself; the rest follow. */
+        private const val PLAYERS_FIRST = 20
+        /** How far a store search chart scrolls. */
+        const val MAX_LISTED = 500
     }
 }

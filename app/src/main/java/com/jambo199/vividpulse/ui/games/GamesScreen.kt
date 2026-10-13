@@ -3,6 +3,7 @@ package com.jambo199.vividpulse.ui.games
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
@@ -44,6 +45,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -68,6 +70,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.jambo199.vividpulse.games.Chart
 import com.jambo199.vividpulse.games.EpicGame
 import com.jambo199.vividpulse.games.Game
 import com.jambo199.vividpulse.ui.Routes
@@ -97,6 +100,15 @@ fun GamesScreen(open: (String) -> Unit) {
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val chartState = tab.chart?.let { vm.chart(it).collectAsStateWithLifecycle().value }
     val epicState by vm.epic.collectAsStateWithLifecycle()
+    val steamFree by vm.chart(Chart.FREE_TO_KEEP).collectAsStateWithLifecycle()
+    val dealSort by vm.dealSort.collectAsStateWithLifecycle()
+    val asked by GamesViewModel.asked.collectAsStateWithLifecycle()
+    LaunchedEffect(asked) { vm.takeAsked() }
+    val listState = rememberLazyListState()
+    // A new list, or a new order, starts from its top rather than somewhere down the old one.
+    LaunchedEffect(tab, dealSort) {
+        if (listState.firstVisibleItemIndex > 4) listState.scrollToItem(0)
+    }
     val refreshing = chartState?.loading ?: epicState.loading
     var searching by rememberSaveable { mutableStateOf(false) }
     val query by vm.query.collectAsStateWithLifecycle()
@@ -117,6 +129,7 @@ fun GamesScreen(open: (String) -> Unit) {
         ) {
             LazyColumn(
                 Modifier.fillMaxSize(),
+                state = listState,
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = top + 8.dp, bottom = TabBottomPadding),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -157,7 +170,7 @@ fun GamesScreen(open: (String) -> Unit) {
                         query.isBlank() -> item { Hint("Type a game's name to see its live player count, price and page.") }
                         found != null && found.isEmpty() -> item { Hint("No games called \"$query\" on Steam") }
                         found != null -> itemsIndexed(found, key = { _, g -> "search-${g.appId}" }) { i, g ->
-                            GameRow(g, GamesTab.TOP_SELLERS, false, Modifier.entrance(i), showRank = false) { open(Routes.game(g.appId)) }
+                            GameRow(g, GamesTab.TOP_SELLERS, false, Modifier.entrance(i), place = null) { open(Routes.game(g.appId)) }
                         }
                         r.error != null -> item { ErrorCard(r.error) { vm.search(query) } }
                         else -> items(4) { ShimmerBox(Modifier.fillMaxWidth().height(80.dp)) }
@@ -181,31 +194,62 @@ fun GamesScreen(open: (String) -> Unit) {
                         modifier = Modifier.padding(start = 6.dp),
                     )
                 }
-                if (tab.chart != null) {
+                if (tab == GamesTab.DEALS) {
+                    item { SortPicker(dealSort, Modifier.entrance(2)) { vm.sortDeals(it) } }
+                }
+                val chart = tab.chart
+                if (chart != null) {
                     val s = chartState ?: ListState()
-                    val games = s.items
+                    val games = s.items?.let { if (tab == GamesTab.DEALS) dealSort.apply(it) else it }
                     when {
                         games != null -> {
                             val history = games.any { it.lastWeekRank != null }
+                            val heroes = tab != GamesTab.DEALS
                             itemsIndexed(games, key = { _, g -> "${tab.name}-${g.appId}" }) { i, g ->
-                                val modifier = Modifier.entrance(i + 2)
-                                if (i < 3 && tab != GamesTab.DEALS) {
-                                    HeroGame(g, tab, history, modifier) { open(Routes.game(g.appId)) }
+                                // Cards further down appear as you reach them, without waiting their turn.
+                                val modifier = Modifier.animateItem().entrance(if (i < 10) i + 2 else 2)
+                                if (i < 3 && heroes) {
+                                    HeroGame(g, tab, history, i + 1, modifier) { open(Routes.game(g.appId)) }
                                 } else {
-                                    GameRow(g, tab, history, modifier) { open(Routes.game(g.appId)) }
+                                    GameRow(g, tab, history, modifier, place = i + 1) { open(Routes.game(g.appId)) }
                                 }
+                            }
+                            if (s.canLoadMore) {
+                                item(key = "more-${tab.name}") {
+                                    if (s.error != null && !s.loadingMore) {
+                                        Hint("Couldn't load more · tap to try again", Modifier.clickable { vm.loadMore(chart) })
+                                    } else {
+                                        // Reaching the end of the list loads the next page.
+                                        LaunchedEffect(games.size) { vm.loadMore(chart) }
+                                        ShimmerBox(Modifier.fillMaxWidth().height(80.dp))
+                                    }
+                                }
+                            } else if (games.size > 20) {
+                                item(key = "end-${tab.name}") { Hint(endOfList(tab, games.size)) }
                             }
                         }
                         s.error != null -> item { ErrorCard(s.error) { vm.refresh() } }
                         else -> items(6) { i -> ShimmerBox(Modifier.fillMaxWidth().height(if (i < 3) 190.dp else 80.dp)) }
                     }
                 } else {
+                    item { Heading("FREE ON EPIC") }
                     val games = epicState.items
                     when {
-                        games != null && games.isEmpty() -> item { ErrorCard("No free games listed right now") { vm.refresh() } }
+                        games != null && games.isEmpty() -> item { Hint("Epic isn't giving anything away right now.") }
                         games != null -> itemsIndexed(games, key = { _, g -> g.url }) { i, g -> EpicCard(g, Modifier.entrance(i + 2)) }
                         epicState.error != null -> item { ErrorCard(epicState.error ?: "") { vm.refresh() } }
-                        else -> items(3) { ShimmerBox(Modifier.fillMaxWidth().height(260.dp)) }
+                        else -> items(2) { ShimmerBox(Modifier.fillMaxWidth().height(260.dp)) }
+                    }
+                    item { Heading("FREE TO KEEP ON STEAM") }
+                    val steam = steamFree.items
+                    when {
+                        steam != null && steam.isEmpty() ->
+                            item { Hint("Nothing on Steam is free to keep right now. When a paid game is given away, it shows up here.") }
+                        steam != null -> itemsIndexed(steam, key = { _, g -> "free-${g.appId}" }) { i, g ->
+                            GameRow(g, tab, false, Modifier.entrance(i + 4), place = null) { open(Routes.game(g.appId)) }
+                        }
+                        steamFree.error != null -> item { ErrorCard(steamFree.error ?: "") { vm.refresh() } }
+                        else -> items(2) { ShimmerBox(Modifier.fillMaxWidth().height(80.dp)) }
                     }
                 }
                 }
@@ -250,7 +294,7 @@ private fun TabPicker(selected: GamesTab, modifier: Modifier, onSelect: (GamesTa
 }
 
 @Composable
-private fun HeroGame(g: Game, tab: GamesTab, history: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun HeroGame(g: Game, tab: GamesTab, history: Boolean, place: Int, modifier: Modifier, onClick: () -> Unit) {
     Box(
         modifier
             .fillMaxWidth()
@@ -264,12 +308,17 @@ private fun HeroGame(g: Game, tab: GamesTab, history: Boolean, modifier: Modifie
                 .background(Brush.verticalGradient(0.35f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.85f))),
         )
         Text(
-            "#${g.rank}",
+            "#$place",
             style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Black),
             color = Color.White,
             modifier = Modifier.align(Alignment.TopStart).padding(14.dp),
         )
-        Row(Modifier.align(Alignment.TopEnd).padding(14.dp)) { if (history) RankChange(g) }
+        Row(Modifier.align(Alignment.TopEnd).padding(14.dp)) {
+            when {
+                history -> RankChange(g)
+                g.discountPercent > 0 -> Pill("-${g.discountPercent}%", Accents.battery)
+            }
+        }
         Column(Modifier.align(Alignment.BottomStart).padding(16.dp)) {
             Text(g.name, style = MaterialTheme.typography.titleLarge, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(subline(g, tab), style = MaterialTheme.typography.bodyMedium.merge(Numbers), color = Color.White.copy(alpha = 0.85f), maxLines = 1)
@@ -278,32 +327,44 @@ private fun HeroGame(g: Game, tab: GamesTab, history: Boolean, modifier: Modifie
 }
 
 @Composable
-private fun GameRow(g: Game, tab: GamesTab, history: Boolean, modifier: Modifier, showRank: Boolean = true, onClick: () -> Unit) {
+private fun GameRow(g: Game, tab: GamesTab, history: Boolean, modifier: Modifier, place: Int?, onClick: () -> Unit) {
     GlassCard(modifier.fillMaxWidth(), onClick = onClick, padding = 10.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (showRank) {
+            if (place != null) {
                 Text(
-                    "${g.rank}",
-                    style = MaterialTheme.typography.titleLarge.merge(Numbers),
+                    "$place",
+                    style = (if (place < 100) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleSmall).merge(Numbers),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.width(34.dp).padding(start = 4.dp),
+                    maxLines = 1,
+                    modifier = Modifier.width(38.dp).padding(start = 4.dp),
                 )
             }
             GameImage(g.imageUrl, g.appId, Modifier.width(118.dp).aspectRatio(460f / 215f).clip(RoundedCornerShape(12.dp)))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(g.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (tab == GamesTab.DEALS) {
+                if (tab == GamesTab.DEALS || tab == GamesTab.FREE) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(g.price ?: "", style = MaterialTheme.typography.bodyMedium.merge(Numbers), fontWeight = FontWeight.Bold, color = Accents.battery.start)
+                        Text(
+                            if (tab == GamesTab.FREE) "Free to keep" else g.price ?: "",
+                            style = MaterialTheme.typography.bodyMedium.merge(Numbers),
+                            fontWeight = FontWeight.Bold,
+                            color = Accents.battery.start,
+                        )
                         g.originalPrice?.let {
                             Spacer(Modifier.width(6.dp))
                             Text(it, style = MaterialTheme.typography.bodySmall.copy(textDecoration = TextDecoration.LineThrough), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    g.dealEnds?.let { Text("Ends ${endsIn(it * 1000)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    val more = dealLine(g)
+                    if (more.isNotEmpty()) {
+                        Text(more, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 } else {
-                    Text(subline(g, tab), style = MaterialTheme.typography.bodySmall.merge(Numbers), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    Text(subline(g, tab), style = MaterialTheme.typography.bodySmall.merge(Numbers), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (tab == GamesTab.UPCOMING || tab == GamesTab.TOP_SELLERS) {
+                        g.reviewLabel?.let { Text(reviews(g), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }
+                    }
                 }
             }
             Spacer(Modifier.width(6.dp))
@@ -328,11 +389,31 @@ private fun subline(g: Game, tab: GamesTab): String = when (tab) {
         g.playersNow?.let { "${Format.compact(it)} playing" },
         g.peakToday?.let { "peak ${Format.compact(it)}" },
     ).joinToString(" · ")
+    GamesTab.UPCOMING -> listOfNotNull(g.release ?: "Coming soon", g.price?.let { "pre-order $it" }).joinToString(" · ")
     else -> listOfNotNull(
         g.price,
         g.discountPercent.takeIf { it > 0 }?.let { "-$it%" },
         g.weeksOnChart?.takeIf { it > 1 }?.let { "$it weeks" },
     ).joinToString(" · ")
+}
+
+/** Under a deal's price: when it ends, how many are playing, what reviewers think. */
+private fun dealLine(g: Game): String = listOfNotNull(
+    g.dealEnds?.let { "Ends ${endsIn(it * 1000)}" },
+    g.playersNow?.takeIf { it > 0 }?.let { "${Format.compact(it)} playing" },
+    g.reviewLabel?.takeIf { g.reviewCount != null },
+).joinToString(" · ")
+
+/** "Very Positive · 92% of 12K" */
+private fun reviews(g: Game): String = listOfNotNull(
+    g.reviewLabel,
+    g.reviewPercent?.let { p -> g.reviewCount?.let { "$p% of ${Format.compact(it)}" } },
+).joinToString(" · ")
+
+private fun endOfList(tab: GamesTab, n: Int): String = when (tab) {
+    GamesTab.MOST_PLAYED -> "Steam's top $n by players right now"
+    GamesTab.TOP_SELLERS -> "This week's top $n sellers on Steam"
+    else -> "That's all $n"
 }
 
 @Composable
@@ -430,8 +511,39 @@ private fun SearchField(query: String, onChange: (String) -> Unit) {
 }
 
 @Composable
-private fun Hint(text: String) {
-    Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp))
+private fun Hint(text: String, modifier: Modifier = Modifier) {
+    Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier.padding(horizontal = 6.dp, vertical = 8.dp))
+}
+
+@Composable
+private fun Heading(text: String) {
+    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 6.dp, top = 6.dp))
+}
+
+/** How to order the deals: smaller chips under the lists. */
+@Composable
+private fun SortPicker(selected: DealSort, modifier: Modifier, onSelect: (DealSort) -> Unit) {
+    Row(
+        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Sort", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 6.dp, end = 2.dp))
+        DealSort.entries.forEach { d ->
+            val on = d == selected
+            val glow by animateFloatAsState(if (on) 1f else 0f, spring(dampingRatio = 0.7f, stiffness = 500f), label = "sort")
+            Box(
+                Modifier
+                    .clip(CircleShape)
+                    .border(1.dp, Accents.battery.start.copy(alpha = 0.6f * (1f - glow)), CircleShape)
+                    .background(Accents.battery.brush, alpha = glow)
+                    .bouncyClick { onSelect(d) }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            ) {
+                Text(d.label, style = MaterialTheme.typography.labelMedium, color = if (on) Color.White else MaterialTheme.colorScheme.onSurface)
+            }
+        }
+    }
 }
 
 /** Starred games with their live player counts, in a row you can swipe. */

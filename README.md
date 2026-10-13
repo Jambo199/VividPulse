@@ -29,13 +29,18 @@ opens and every few hours while it's open (Settings › Updates).
   several of vivo's build properties, since phones on OriginOS often still carry the old Funtouch
   names), vivo build number, security update,
   kernel, uptime and deep sleep, chip (e.g. Snapdragon 8 Elite) and its cores, display (resolution,
-  refresh rates, HDR formats, size), cameras (megapixels, 35 mm-equivalent lens,
-  aperture, stabilisation, 8K / 10-bit / RAW), every sensor with live readings, and features such
+  refresh rates, HDR formats, size), cameras (for the vivo X200 Ultra, the full kit as vivo sells
+  it; then every lens Android shares with apps, including ones it leaves out of the usual list:
+  full-resolution megapixels, 35 mm-equivalent lens, sensor size, aperture, stabilisation, zoom
+  range, best video mode, slow motion, HLG / HDR10 / Dolby Vision, night and portrait modes, RAW),
+  every sensor with live readings, and features such
   as Wi-Fi 7, NFC, the infrared remote and ultra-wideband. Long-press a row to copy it; share the
   whole spec sheet.
-- **Games** – Steam's **top 20 most played** right now with live player counts, today's peak and
-  how each moved since last week; this week's **top sellers**; **deals**; and the games **free on
-  Epic** now and next. **Search** any game on Steam. Tap a game for its page: live players with a
+- **Games** – Steam's **top 100 most played** right now with live player counts, today's peak and
+  how each moved since last week; this week's **top 100 sellers**; **deals** that keep loading as
+  you scroll, sorted by popularity, players, biggest discount or reviews; the **most anticipated**
+  games not out yet; and **free games**: Epic's giveaways now and next, plus anything free to keep
+  on Steam. **Search** any game on Steam. Tap a game for its page: live players with a
   chart, price and discount, genres, Metacritic, screenshots, share, and buttons to open it in
   Steam or see its player history. **Star** a game to keep its live player count in *Your games*
   at the top of the page.
