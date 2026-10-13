@@ -99,6 +99,7 @@ class GsmArenaTest {
         assertEquals("Depth", GsmArena.lens("TOF 3D, (depth)", front = false)?.kind)
         assertEquals("1\"", GsmArena.lens("50 MP, f/1.6, 23mm (wide), 1.0\", 1.6µm, OIS", front = false)?.sensor?.replace("1.0", "1"))
         assertNull(GsmArena.lens("", front = false))
+        assertEquals("Ultra-wide selfie", GsmArena.lens("42 MP, f/2.2, 17mm (ultrawide), 1/2.8\", AF", front = true)?.kind)
     }
 
     /**

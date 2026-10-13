@@ -98,7 +98,8 @@ object GsmArena {
 
     private fun cameras(modules: String?, features: String?, video: String?, front: Boolean): SheetCameras? {
         // Widest first: ultra-wide, main, then zoom.
-        val lenses = modules?.lines()?.mapNotNull { lens(it, front) }.orEmpty().sortedBy { it.mm ?: 999 }
+        val lenses = modules?.lines()?.mapNotNull { lens(it, front) }.orEmpty()
+            .sortedBy { it.mm ?: if (it.kind.startsWith("Ultra-wide")) 13 else 999 }
         if (lenses.isEmpty()) return null
         return SheetCameras(
             lenses = lenses,
@@ -118,7 +119,7 @@ object GsmArena {
         val kind = when {
             "periscope" in label -> "Periscope telephoto"
             "telephoto" in label -> "Telephoto"
-            "ultrawide" in label || "ultra wide" in label -> "Ultra-wide"
+            "ultrawide" in label || "ultra wide" in label -> if (front) "Ultra-wide selfie" else "Ultra-wide"
             "macro" in label -> "Macro"
             "depth" in label || "tof" in label -> "Depth"
             "wide" in label -> if (front) "Selfie" else "Main"
