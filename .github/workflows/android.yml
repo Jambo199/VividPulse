@@ -99,6 +99,7 @@ jobs:
               || echo "(failed)"
           }
           search "specials=1&filter=topsellers"
+          search "filter=popularwishlist"
           search "filter=popularcomingsoon"
           search "maxprice=free&specials=1"
           # Reviews and release dates from GetItems: a released game and an upcoming one.

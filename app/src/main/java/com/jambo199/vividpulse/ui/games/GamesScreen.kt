@@ -358,12 +358,13 @@ private fun GameRow(g: Game, tab: GamesTab, history: Boolean, modifier: Modifier
                     }
                     val more = dealLine(g)
                     if (more.isNotEmpty()) {
-                        Text(more, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(more, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                 } else {
                     Text(subline(g, tab), style = MaterialTheme.typography.bodySmall.merge(Numbers), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (tab == GamesTab.UPCOMING || tab == GamesTab.TOP_SELLERS) {
-                        g.reviewLabel?.let { Text(reviews(g), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }
+                    // Games not out yet have no reviews to show.
+                    if ((tab == GamesTab.UPCOMING || tab == GamesTab.TOP_SELLERS) && g.reviewCount != null) {
+                        Text(reviews(g), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                     }
                 }
             }
@@ -591,10 +592,18 @@ private fun ago(ms: Long): String =
     DateUtils.getRelativeTimeSpanString(ms, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
         .replace("0 minutes ago", "just now").lowercase(Locale.getDefault())
 
+/** "in 5 hours", "in 3 days", or the date when it's further off: short enough for a deal's row. */
 private fun endsIn(ms: Long): String {
-    // "In 3 days" reads as "in 3 days"; a date like "Oct 23, 2026" keeps its capitals.
-    val text = DateUtils.getRelativeTimeSpanString(ms, System.currentTimeMillis(), DateUtils.HOUR_IN_MILLIS).toString()
-    return if (text.startsWith("In ")) text.replaceFirstChar { it.lowercase() } else text
+    val left = ms - System.currentTimeMillis()
+    val hour = DateUtils.HOUR_IN_MILLIS
+    val day = DateUtils.DAY_IN_MILLIS
+    return when {
+        left <= 0 -> "now"
+        left < hour -> "within the hour"
+        left < day -> (left / hour).let { "in $it hour" + if (it == 1L) "" else "s" }
+        left < 7 * day -> (left / day).let { "in $it day" + if (it == 1L) "" else "s" }
+        else -> SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(ms))
+    }
 }
 
 private fun day(ms: Long): String = SimpleDateFormat("EEE d MMM, HH:mm", Locale.getDefault()).format(Date(ms))

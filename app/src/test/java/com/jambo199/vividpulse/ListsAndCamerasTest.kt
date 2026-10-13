@@ -34,6 +34,7 @@ class ListsAndCamerasTest {
         assertTrue(url.startsWith("https://store.steampowered.com/search/results/?specials=1&filter=topsellers"))
         assertTrue(url.contains("&start=50&count=50&infinite=1&cc=GB"))
         assertTrue(Steam.storeSearchUrl(StoreSearch.UPCOMING, 0, 50, "GB").contains("filter=popularcomingsoon"))
+        assertTrue(Steam.storeSearchUrl(StoreSearch.WISHLISTED, 0, 50, "GB").contains("filter=popularwishlist"))
     }
 
     @Test

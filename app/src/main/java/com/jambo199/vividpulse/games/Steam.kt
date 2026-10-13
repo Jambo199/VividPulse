@@ -119,7 +119,9 @@ data class SearchPage(val appIds: List<Int>, val rows: Int, val total: Int)
 enum class StoreSearch(val query: String) {
     /** Games on sale, in the order the store ranks them (best sellers first). */
     DEALS("specials=1&filter=topsellers"),
-    /** The most anticipated games that aren't out yet. */
+    /** The most wishlisted games: the store's list of the most anticipated. */
+    WISHLISTED("filter=popularwishlist"),
+    /** Popular games coming out soon, for when the wishlist chart isn't available. */
     UPCOMING("filter=popularcomingsoon"),
     /** Paid games that are free to keep for now. */
     FREE_TO_KEEP("maxprice=free&specials=1"),

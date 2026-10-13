@@ -22,12 +22,15 @@ enum class Chart(val label: String, val search: StoreSearch? = null) {
     MOST_PLAYED("Most played"),
     TOP_SELLERS("Top sellers"),
     DEALS("Deals", StoreSearch.DEALS),
-    UPCOMING("Most anticipated", StoreSearch.UPCOMING),
+    UPCOMING("Most anticipated", StoreSearch.WISHLISTED),
     FREE_TO_KEEP("Free to keep on Steam", StoreSearch.FREE_TO_KEEP),
 }
 
-/** A chart as far as it's loaded; [nextStart] is where the next page starts, null at the end. */
-data class GameList(val games: List<Game>, val fetchedAt: Long, val nextStart: Int? = null)
+/**
+ * A chart as far as it's loaded; [nextStart] is where the next page starts, null at the end, and
+ * [source] the store search it pages through.
+ */
+data class GameList(val games: List<Game>, val fetchedAt: Long, val nextStart: Int? = null, val source: StoreSearch? = null)
 
 /**
  * Fetches Steam's charts and Epic's free games, keeping the last good copy of each on disk so
@@ -61,11 +64,16 @@ class GamesRepository(context: Context) {
         val list = when (chart) {
             Chart.MOST_PLAYED -> GameList(mostPlayed(), now)
             Chart.TOP_SELLERS -> GameList(topSellers(), now)
-            Chart.DEALS -> runCatching { storePage(Chart.DEALS, 0, 0) }
+            Chart.DEALS -> runCatching { storePage(Chart.DEALS, StoreSearch.DEALS, 0, 0) }
                 .onFailure { Log.w(TAG, "Store search failed, using the featured specials", it) }
                 .getOrNull()?.takeIf { it.games.isNotEmpty() }
                 ?: GameList(Steam.parseFeatured(Http.get(Steam.featuredUrl(country)), "specials"), now)
-            Chart.UPCOMING, Chart.FREE_TO_KEEP -> storePage(chart, 0, 0)
+            // The most wishlisted games; if the store won't give that list, the popular ones coming soon.
+            Chart.UPCOMING -> runCatching { storePage(chart, StoreSearch.WISHLISTED, 0, 0) }
+                .onFailure { Log.w(TAG, "Most wishlisted failed, using popular upcoming", it) }
+                .getOrNull()?.takeIf { it.games.isNotEmpty() }
+                ?: storePage(chart, StoreSearch.UPCOMING, 0, 0)
+            Chart.FREE_TO_KEEP -> storePage(chart, StoreSearch.FREE_TO_KEEP, 0, 0)
         }
         // Nothing free to keep is normal; an empty chart isn't.
         if (list.games.isEmpty() && chart != Chart.FREE_TO_KEEP) throw java.io.IOException("Steam sent an empty list")
@@ -82,8 +90,9 @@ class GamesRepository(context: Context) {
     suspend fun more(chart: Chart): GameList? = withContext(Dispatchers.IO) {
         val have = memory[chart] ?: return@withContext null
         val start = have.nextStart ?: return@withContext have
-        if (chart.search == null || have.games.size >= MAX_LISTED) return@withContext have.copy(nextStart = null)
-        val page = storePage(chart, start, have.games.size)
+        val source = have.source ?: chart.search
+        if (source == null || have.games.size >= MAX_LISTED) return@withContext have.copy(nextStart = null)
+        val page = storePage(chart, source, start, have.games.size)
         page.games.forEach { known.putIfAbsent(it.appId, it) }
         lock.withLock {
             val current = memory[chart] ?: have
@@ -119,16 +128,18 @@ class GamesRepository(context: Context) {
         memory[chart]?.let { writeCache(chart, it) }
     }
 
-    /** One page of a store search chart, ranked on from [after]. */
-    private suspend fun storePage(chart: Chart, start: Int, after: Int): GameList {
-        val kind = chart.search ?: error("$chart isn't a store search")
+    /** One page of the store search [kind] for [chart], ranked on from [after]. */
+    private suspend fun storePage(chart: Chart, kind: StoreSearch, start: Int, after: Int): GameList {
         val page = Steam.parseSearchPage(Http.get(Steam.storeSearchUrl(kind, start, PAGE, country)))
         val items = itemsFor(page.appIds)
-        // Keep the store's order; anything it can't describe in this country is left out.
-        val games = page.appIds.mapNotNull { items[it] }.mapIndexed { i, item -> item.toGame(after + i + 1) }
+        // Keep the store's order; anything it can't describe in this country is left out, and so
+        // is anything already out on the list of games still to come.
+        val games = page.appIds.mapNotNull { items[it] }
+            .filter { chart != Chart.UPCOMING || it.release != null }
+            .mapIndexed { i, item -> item.toGame(after + i + 1) }
         val next = start + page.rows
-        Log.i(TAG, "$chart from $start: ${games.size} games of ${page.appIds.size} (${page.rows} rows, ${page.total} in all)")
-        return GameList(games, System.currentTimeMillis(), next.takeIf { page.rows > 0 && it < page.total })
+        Log.i(TAG, "$chart ($kind) from $start: ${games.size} games of ${page.appIds.size} (${page.rows} rows, ${page.total} in all)")
+        return GameList(games, System.currentTimeMillis(), next.takeIf { page.rows > 0 && it < page.total }, kind)
     }
 
     /** Store listings for any number of games, a few requests at once. */
@@ -218,7 +229,8 @@ class GamesRepository(context: Context) {
                     .put("reviewLabel", g.reviewLabel ?: "").put("reviewCount", g.reviewCount ?: 0).put("reviewPercent", g.reviewPercent ?: -1)
             })
             cacheFile(chart).writeText(
-                JSONObject().put("fetchedAt", list.fetchedAt).put("nextStart", list.nextStart ?: -1).put("games", a).toString(),
+                JSONObject().put("fetchedAt", list.fetchedAt).put("nextStart", list.nextStart ?: -1)
+                    .put("source", list.source?.name ?: "").put("games", a).toString(),
             )
         }
     }
@@ -251,6 +263,7 @@ class GamesRepository(context: Context) {
             },
             o.getLong("fetchedAt"),
             o.optInt("nextStart", -1).takeIf { it >= 0 },
+            StoreSearch.entries.firstOrNull { it.name == o.optString("source") },
         )
     }.getOrNull()
 

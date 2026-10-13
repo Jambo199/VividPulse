@@ -275,7 +275,8 @@ private fun LensRow(l: LensSpec) {
 private fun CameraCard(cam: CameraSpec, modifier: Modifier) {
     val front = cam.facing == "Front"
     val accent = if (front) Accents.upload else Accents.games
-    val lensNames = cam.lenses.map { it.kind }.distinct()
+    // "14 mm, 35 mm and 85 mm", or the kinds of lens when their focal lengths aren't known.
+    val lensNames = cam.lenses.map { l -> l.equivalentMm?.let { "$it mm" } ?: l.kind.lowercase(Locale.US) }.distinct()
     GlassCard(modifier.fillMaxWidth(), accent = accent) {
         CardTitle(
             Icons.Rounded.CameraAlt,
@@ -285,7 +286,11 @@ private fun CameraCard(cam: CameraSpec, modifier: Modifier) {
         )
         if (cam.lenses.size > 1) {
             Text(
-                "Switches between ${lensNames.joinToString(", ").lowercase(Locale.US)} as you zoom",
+                if (lensNames.size > 1) {
+                    "Switches between its ${lensNames.dropLast(1).joinToString(", ")} and ${lensNames.last()} lenses as you zoom"
+                } else {
+                    "Joins ${cam.lenses.size} lenses into one"
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),
