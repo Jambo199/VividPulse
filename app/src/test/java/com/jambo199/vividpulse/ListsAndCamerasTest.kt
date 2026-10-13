@@ -94,6 +94,23 @@ class ListsAndCamerasTest {
     }
 
     @Test
+    fun videoModesBiggestFirstWithSlowMotion() {
+        val normal = listOf(
+            Triple(7680, 4320, 30), Triple(3840, 2160, 60), Triple(4096, 2160, 30),
+            Triple(1920, 1080, 60), Triple(1280, 720, 60), Triple(640, 480, 30),
+        )
+        val slow = listOf(Triple(3840, 2160, 120), Triple(1920, 1080, 240), Triple(1280, 720, 60))
+        val modes = CameraMath.videoModes(normal, slow)
+        assertEquals(listOf("8K", "4K", "1080p", "720p"), modes.map { it.name })
+        assertEquals("8K 30 fps", modes[0].toString())
+        assertEquals("4K 60 fps · 120 fps slow-mo", modes[1].toString())
+        assertEquals(240, modes[2].slowMotionFps)
+        // Slow motion no faster than normal recording isn't worth showing.
+        assertNull(modes[3].slowMotionFps)
+        assertTrue(CameraMath.videoModes(emptyList(), slow).isEmpty())
+    }
+
+    @Test
     fun hdrFormats() {
         assertEquals(listOf("HLG", "HDR10", "HDR10+", "Dolby Vision"), CameraMath.hdrNames(setOf(1L, 2L, 4L, 8L, 64L)))
         assertTrue(CameraMath.hdrNames(setOf(1L)).isEmpty())
@@ -106,6 +123,7 @@ class ListsAndCamerasTest {
         val back = known!!.lenses.filter { it.kind != "Selfie" }
         assertEquals(listOf(14, 35, 85), back.mapNotNull { it.mm }.sorted())
         assertEquals(200, back.maxOf { it.megapixels })
+        assertTrue(known.video.startsWith("8K at 30 fps"))
         assertNull(KnownPhones.cameras("Pixel 9"))
     }
 }

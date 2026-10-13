@@ -35,7 +35,10 @@ data class CameraSpec(
     val lenses: List<LensSpec>,
     val zoom: ClosedFloatingPointRange<Float>?,
     val megapixels: Float?,
+    /** The best way it records: "8K 30 fps". */
     val video: String?,
+    /** Every recording size apps can use, biggest first, each at its fastest. */
+    val videoModes: List<VideoMode>,
     val slowMotionFps: Int?,
     val hdrVideo: List<String>,
     val raw: Boolean,
@@ -45,6 +48,11 @@ data class CameraSpec(
     /** Left out of the camera list Android gives apps, but there when asked for by number. */
     val hidden: Boolean,
 )
+
+/** A recording size and how fast it goes: normally, and in slow motion when the camera offers it. */
+data class VideoMode(val name: String, val fps: Int, val slowMotionFps: Int? = null) {
+    override fun toString(): String = "$name $fps fps" + (slowMotionFps?.let { " · $it fps slow-mo" } ?: "")
+}
 
 data class CameraReport(
     val cameras: List<CameraSpec>,
@@ -78,16 +86,22 @@ object CameraReader {
             .ifEmpty { listOf(lens(id, c)) }
         val caps = c.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.toList().orEmpty()
         val streams = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-        val video = streams?.getOutputSizes(MediaRecorder::class.java)?.maxByOrNull { it.width.toLong() * it.height }
-        val videoFps = video?.let { size ->
+        // Every size a video can be recorded at, with the fastest frame rate for each.
+        val normal = streams?.getOutputSizes(MediaRecorder::class.java).orEmpty().mapNotNull { size ->
             runCatching { streams?.getOutputMinFrameDuration(MediaRecorder::class.java, size) }.getOrNull()
-                ?.takeIf { it > 0 }?.let { (1e9 / it).roundToInt() }
+                ?.takeIf { it > 0 }?.let { Triple(size.width, size.height, (1e9 / it).roundToInt()) }
         }
-        val slowMo = if (caps.contains(CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_CONSTRAINED_HIGH_SPEED_VIDEO)) {
-            runCatching { streams?.highSpeedVideoFpsRanges?.maxOfOrNull { it.upper } }.getOrNull()
+        // Slow motion ("high speed") sizes and their frame rates.
+        val highSpeed = if (caps.contains(CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_CONSTRAINED_HIGH_SPEED_VIDEO)) {
+            runCatching {
+                streams?.highSpeedVideoSizes.orEmpty().mapNotNull { size ->
+                    streams?.getHighSpeedVideoFpsRangesFor(size)?.maxOfOrNull { it.upper }?.let { Triple(size.width, size.height, it) }
+                }
+            }.getOrDefault(emptyList())
         } else {
-            null
+            emptyList()
         }
+        val modes = CameraMath.videoModes(normal, highSpeed)
         val zoom = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             c.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)?.let { it.lower..it.upper }?.takeIf { it.endInclusive > 1.01f }
         } else {
@@ -99,8 +113,9 @@ object CameraReader {
             lenses = lenses,
             zoom = zoom ?: c.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM)?.takeIf { it > 1f }?.let { 1f..it },
             megapixels = megapixels(c),
-            video = video?.let { v -> CameraMath.videoName(v.width, v.height) + (videoFps?.takeIf { it > 0 }?.let { " $it fps" } ?: "") },
-            slowMotionFps = slowMo,
+            video = modes.firstOrNull()?.let { "${it.name} ${it.fps} fps" },
+            videoModes = modes,
+            slowMotionFps = highSpeed.maxOfOrNull { it.third },
             hdrVideo = hdrVideo(c),
             raw = caps.contains(CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_RAW),
             modes = modes(cm, id),
@@ -201,6 +216,24 @@ object CameraMath {
         }
     }
 
+    /**
+     * Recording modes from the sizes a camera offers, as (width, height, fastest fps): one per
+     * standard size (8K, 4K, 1440p, 1080p, 720p), biggest first, each at its fastest normal frame
+     * rate, plus the fastest slow motion at that size if there is one.
+     */
+    fun videoModes(normal: List<Triple<Int, Int, Int>>, highSpeed: List<Triple<Int, Int, Int>>): List<VideoMode> {
+        val standard = listOf("8K", "4K", "1440p", "1080p", "720p")
+        fun best(list: List<Triple<Int, Int, Int>>) = list.groupBy { videoName(it.first, it.second) }
+            .filterKeys { it in standard }
+            .mapValues { (_, sizes) -> sizes.maxOf { it.third } }
+        val fps = best(normal)
+        val slow = best(highSpeed)
+        return standard.mapNotNull { name ->
+            val f = fps[name] ?: return@mapNotNull null
+            VideoMode(name, f, slow[name]?.takeIf { it > f })
+        }
+    }
+
     /** "Ultra-wide", "Main", "Telephoto" from the 35 mm equivalent. */
     fun lensKind(equivalentMm: Int, front: Boolean): String = when {
         front -> "Selfie"
@@ -238,9 +271,9 @@ object KnownPhones {
                     KnownLens("Main", 50, 35, "Sony LYT-818 · 1/1.28\"", "f/1.69", "Stabilised"),
                     KnownLens("Ultra-wide", 50, 14, "Sony LYT-818 · 1/1.28\"", "f/2.0", null),
                     KnownLens("Telephoto (periscope)", 200, 85, "Samsung ISOCELL HP9 · 1/1.4\"", "f/2.27", "3.7× optical · up to 200 mm with vivo's 2.35× extender"),
-                    KnownLens("Selfie", 50, null, null, null, null),
+                    KnownLens("Selfie", 50, null, null, null, "4K 60 fps video"),
                 ),
-                video = "4K up to 120 fps on all three back cameras · Dolby Vision HDR at 4K 60 fps",
+                video = "8K at 30 fps (there's no 8K 60 fps mode)\n4K at up to 120 fps on all three back cameras\n1080p at up to 240 fps\n10-bit Log, Dolby Vision HDR and HDR10+",
             )
             else -> null
         }

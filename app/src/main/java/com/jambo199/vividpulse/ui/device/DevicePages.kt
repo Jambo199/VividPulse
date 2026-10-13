@@ -77,6 +77,7 @@ import com.jambo199.vividpulse.ui.components.entrance
 import com.jambo199.vividpulse.ui.components.sharedCard
 import com.jambo199.vividpulse.ui.rememberSpecs
 import com.jambo199.vividpulse.ui.theme.Accents
+import com.jambo199.vividpulse.ui.theme.Numbers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Locale
@@ -301,6 +302,13 @@ private fun CameraCard(cam: CameraSpec, modifier: Modifier) {
             Stat("Biggest photo", cam.megapixels?.let { "${it.roundToInt()} MP" } ?: "—", Modifier.weight(1f))
             Stat("Zoom", cam.zoom?.let { z -> zoomText(z.start) + "–" + zoomText(z.endInclusive) } ?: "—", Modifier.weight(1f))
             Stat("Video", cam.video ?: "—", Modifier.weight(1f))
+        }
+        if (cam.videoModes.size > 1 || cam.videoModes.any { it.slowMotionFps != null }) {
+            Spacer(Modifier.height(10.dp))
+            Text("Video modes apps can use", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            cam.videoModes.forEach { m ->
+                Text(m.toString(), style = MaterialTheme.typography.bodyMedium.merge(Numbers), modifier = Modifier.padding(top = 2.dp))
+            }
         }
         Spacer(Modifier.height(12.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
