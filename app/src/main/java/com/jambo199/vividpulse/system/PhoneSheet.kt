@@ -51,10 +51,11 @@ object GsmArena {
     /**
      * The phones on a search page: name and page address. Every link to a phone page counts
      * (phone pages are "maker_model-1234.php"; news and reviews have more to their names), so it
-     * reads the desktop and the mobile site alike; [bestMatch] then keeps only this phone.
+     * reads the desktop and the mobile site alike (the mobile site leaves out the quotes);
+     * [bestMatch] then keeps only this phone.
      */
     fun parseResults(html: String): List<Pair<String, String>> =
-        Regex("""<a href="(?:https://(?:www|m)\.gsmarena\.com/)?([a-z0-9_]+-\d+\.php)"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
+        Regex("""<a href=["']?(?:https://(?:www|m)\.gsmarena\.com/)?([a-z0-9_]+-\d+\.php)["']?[\s>][^>]*>?(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
             .findAll(html)
             .mapNotNull { m ->
                 val inner = m.groupValues[2]
@@ -96,7 +97,8 @@ object GsmArena {
     }
 
     private fun cameras(modules: String?, features: String?, video: String?, front: Boolean): SheetCameras? {
-        val lenses = modules?.lines()?.mapNotNull { lens(it, front) }.orEmpty()
+        // Widest first: ultra-wide, main, then zoom.
+        val lenses = modules?.lines()?.mapNotNull { lens(it, front) }.orEmpty().sortedBy { it.mm ?: 999 }
         if (lenses.isEmpty()) return null
         return SheetCameras(
             lenses = lenses,
@@ -125,7 +127,8 @@ object GsmArena {
             mm != null -> CameraMath.lensKind(mm, front = false)
             else -> "Camera"
         }
-        if (mp == null && kind == "Camera") return null
+        // A line without megapixels is a depth sensor, or an accessory (vivo's add-on zoom lens): not a camera of its own.
+        if (mp == null && kind != "Depth") return null
         return SheetLens(
             megapixels = mp,
             mm = mm,

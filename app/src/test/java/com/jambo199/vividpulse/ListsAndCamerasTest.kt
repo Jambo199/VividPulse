@@ -125,7 +125,7 @@ class ListsAndCamerasTest {
         assertEquals(200f, back.maxOf { it.megapixels ?: 0f })
         assertTrue(back.all { it.ois })
         assertEquals("8K 30 fps · 4K 120 fps · 1080p 240 fps", known.back!!.video)
-        assertEquals(listOf("Dolby Vision"), known.back!!.hdrVideo)
+        assertEquals(listOf("Dolby Vision", "HDR10+"), known.back!!.hdrVideo)
         assertEquals(listOf("Selfie"), known.front!!.lenses.map { it.kind })
         assertNull(KnownPhones.sheet("Pixel 9"))
     }

@@ -287,14 +287,14 @@ object KnownPhones {
                         SheetLens(200f, 85, "Periscope telephoto", "1/1.4\"", "f/2.3", ois = true, zoom = "3.7× optical"),
                     ),
                     video = "8K 30 fps · 4K 120 fps · 1080p 240 fps",
-                    hdrVideo = listOf("Dolby Vision"),
+                    hdrVideo = listOf("Dolby Vision", "HDR10+"),
                     hdrPhotos = true,
                 ),
                 front = SheetCameras(
-                    lenses = listOf(SheetLens(50f, 24, "Selfie", null, "f/2.5", ois = false, zoom = null)),
-                    video = "4K 60 fps",
+                    lenses = listOf(SheetLens(50f, 24, "Selfie", "1/2.76\"", "f/2.5", ois = false, zoom = null)),
+                    video = "4K 60 fps · 1080p 60 fps",
                     hdrVideo = emptyList(),
-                    hdrPhotos = null,
+                    hdrPhotos = true,
                 ),
                 displayHdr = listOf("Dolby Vision", "HDR Vivid"),
             )
