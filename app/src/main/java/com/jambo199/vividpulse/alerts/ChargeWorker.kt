@@ -67,7 +67,7 @@ class ChargeWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         val toFull = b.timeToFullMs?.let { (it / 60_000).toInt() } ?: ChargeMath.minutesTo(100, session.points)
         val text = listOfNotNull(
             toLimit?.let { "$limit% in about ${Format.minutes(it)}" },
-            toFull?.takeIf { level < 100 }?.let { "full in about ${Format.minutes(it)}" },
+            toFull?.takeIf { level < 100 }?.let { if (it < 1) "almost full" else "full in about ${Format.minutes(it)}" },
             b.temperatureC?.let { Format.temperature(it, Graph.settings.current.fahrenheit) },
         ).joinToString(" · ")
         Notify.post(
