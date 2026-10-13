@@ -50,6 +50,16 @@ class GamesParsingTest {
     fun playersNow() {
         assertEquals(1_234_567L, Steam.parsePlayers("""{"response":{"player_count":1234567,"result":1}}"""))
         assertNull(Steam.parsePlayers("""{"response":{"result":42}}"""))
+        // Steam says 0 for some games while people are playing: not known, not "0 playing".
+        assertNull(Steam.parsePlayers("""{"response":{"player_count":0,"result":1}}"""))
+        val now = Steam.parseConcurrent(
+            """{"response":{"last_update":1760000000,"ranks":[
+                {"rank":1,"appid":730,"concurrent_in_game":1312345,"peak_in_game":1600000},
+                {"rank":2,"appid":570,"concurrent_in_game":612000,"peak_in_game":700000},
+                {"rank":3,"appid":99,"concurrent_in_game":0}]}}""",
+        )
+        assertEquals(mapOf(730 to 1_312_345L, 570 to 612_000L), now)
+        assertTrue(Steam.parseConcurrent("""{"response":{}}""").isEmpty())
     }
 
     @Test

@@ -44,6 +44,10 @@ class GamesRepository(context: Context) {
     /** Games Steam has no player count for (not out yet, or not a game). */
     private val noPlayers = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
 
+    /** Steam's chart of players right now (app to players) and when it was fetched. */
+    @Volatile private var concurrent: Pair<Long, Map<Int, Long>>? = null
+    private val concurrentLock = Any()
+
     /** A game we've listed already, so its page can show the name and picture straight away. */
     fun known(appId: Int): Game? = known[appId]
 
@@ -195,15 +199,18 @@ class GamesRepository(context: Context) {
         val gate = Semaphore(6)
         // Counts for the top of the chart now; the rest fill in while you look ([fillPlayers]).
         val players = chart.take(PLAYERS_FIRST).map { g -> async { gate.withPermit { playersNow(g.appId) } } }
+        // Everyone else on the chart straight away, from Steam's own chart of players right now.
+        val chartPlayers = async { concurrentPlayers() }
         val named = items.await()
         // A few apps aren't in the store's listing (tools, betas): look those up one at a time.
         val extra = chart.filter { it.appId !in named }.take(10)
             .map { g -> async { gate.withPermit { g.appId to runCatching { storeItemFromDetails(g.appId) }.getOrNull() } } }
             .awaitAll().toMap()
         val counts = players.awaitAll()
+        val now = chartPlayers.await()
         chart.mapIndexed { i, g ->
             val item = named[g.appId] ?: extra[g.appId]
-            (item?.fill(g) ?: g.copy(name = "App ${g.appId}")).copy(playersNow = counts.getOrNull(i))
+            (item?.fill(g) ?: g.copy(name = "App ${g.appId}")).copy(playersNow = counts.getOrNull(i) ?: now[g.appId])
         }
     }
 
@@ -226,8 +233,25 @@ class GamesRepository(context: Context) {
             StoreItem(appId, it.name, it.imageUrl, it.price, it.originalPrice, it.discountPercent)
         }
 
+    /** How many are playing [appId] now; null when Steam doesn't say. */
     suspend fun playersNow(appId: Int): Long? = withContext(Dispatchers.IO) {
         runCatching { Steam.parsePlayers(Http.get(Steam.playersUrl(appId))) }.getOrNull()
+            // Steam's per-game count is missing (or 0) for some popular games; its chart has them.
+            ?: concurrentPlayers()[appId]
+    }
+
+    /** Steam's chart of players right now, fetched at most once a minute (failures too). */
+    private fun concurrentPlayers(): Map<Int, Long> {
+        synchronized(concurrentLock) {
+            val now = System.currentTimeMillis()
+            concurrent?.takeIf { now - it.first < CONCURRENT_FRESH_MS }?.let { return it.second }
+            val fresh = runCatching { Steam.parseConcurrent(Http.get(Steam.concurrentUrl())) }
+                .onFailure { Log.w(TAG, "Players-right-now chart failed", it) }
+                .getOrNull()
+            val map = fresh?.takeIf { it.isNotEmpty() } ?: concurrent?.second.orEmpty()
+            concurrent = now to map
+            return map
+        }
     }
 
     suspend fun details(appId: Int): GameDetail? = withContext(Dispatchers.IO) {
@@ -278,7 +302,7 @@ class GamesRepository(context: Context) {
                     imageUrl = g.getString("imageUrl"),
                     rank = g.getInt("rank"),
                     lastWeekRank = g.optInt("lastWeekRank").takeIf { it > 0 },
-                    playersNow = g.optLong("playersNow", -1).takeIf { it >= 0 },
+                    playersNow = g.optLong("playersNow", -1).takeIf { it > 0 },
                     peakToday = g.optLong("peakToday", -1).takeIf { it >= 0 },
                     price = g.optString("price").ifBlank { null },
                     originalPrice = g.optString("originalPrice").ifBlank { null },
@@ -308,6 +332,7 @@ class GamesRepository(context: Context) {
         private const val ITEMS_PER_CALL = 50
         /** Live player counts fetched with the chart itself; the rest follow. */
         private const val PLAYERS_FIRST = 20
+        private const val CONCURRENT_FRESH_MS = 60_000L
         /** How far a store search chart scrolls. */
         const val MAX_LISTED = 500
     }

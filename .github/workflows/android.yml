@@ -142,6 +142,23 @@ jobs:
           probe() { echo "--- $1"; curl -sS -m 20 -A "VividPulse-CI" "$1" | head -c "${2:-700}"; echo; }
           probe "https://api.steampowered.com/ISteamChartsService/GetMostPlayedGames/v1/"
           probe "https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=730"
+          probe "https://api.steampowered.com/ISteamChartsService/GetGamesByConcurrentPlayers/v1/" 600
+          # Games on the most played chart that Steam's per-game count calls 0 or doesn't answer for.
+          curl -sS -m 30 "https://api.steampowered.com/ISteamChartsService/GetMostPlayedGames/v1/" | python3 -c '
+          import json, sys, urllib.request
+          from concurrent.futures import ThreadPoolExecutor
+          ranks = json.load(sys.stdin)["response"]["ranks"]
+          def count(a):
+              try:
+                  r = json.load(urllib.request.urlopen(f"https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid={a}", timeout=20))["response"]
+                  return r.get("player_count") if r.get("result") == 1 else "result " + str(r.get("result"))
+              except Exception as e:
+                  return f"failed: {e}"
+          with ThreadPoolExecutor(8) as ex:
+              counts = list(ex.map(lambda r: count(r["appid"]), ranks))
+          odd = [(r["rank"], r["appid"], r.get("peak_in_game"), c) for r, c in zip(ranks, counts) if not isinstance(c, int) or c == 0]
+          print(f"--- per-game player counts: {len(ranks) - len(odd)} of {len(ranks)} fine; 0 or missing:", odd)
+          ' || echo "(per-game check failed)"
           probe "https://api.steampowered.com/IStoreBrowseService/GetItems/v1/?input_json=%7B%22ids%22%3A%5B%7B%22appid%22%3A730%7D%5D%2C%22context%22%3A%7B%22language%22%3A%22english%22%2C%22country_code%22%3A%22GB%22%2C%22steam_realm%22%3A1%7D%2C%22data_request%22%3A%7B%22include_assets%22%3Atrue%2C%22include_basic_info%22%3Atrue%7D%7D" 1500
           probe "https://api.steampowered.com/IStoreTopSellersService/GetWeeklyTopSellers/v1/?input_json=%7B%22country_code%22%3A%22GB%22%2C%22context%22%3A%7B%22language%22%3A%22english%22%2C%22country_code%22%3A%22GB%22%2C%22steam_realm%22%3A1%7D%2C%22data_request%22%3A%7B%22include_assets%22%3Atrue%2C%22include_basic_info%22%3Atrue%7D%2C%22page_start%22%3A0%2C%22page_count%22%3A3%7D" 1500
           probe "https://store.steampowered.com/api/featuredcategories?cc=GB&l=english" 1200

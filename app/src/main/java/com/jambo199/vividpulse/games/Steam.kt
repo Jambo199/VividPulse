@@ -156,6 +156,9 @@ object Steam {
 
     fun playersUrl(appId: Int) = "$API/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=$appId"
 
+    /** Steam's chart of games by how many are playing right now (what the store's charts page shows). */
+    fun concurrentUrl() = "$API/ISteamChartsService/GetGamesByConcurrentPlayers/v1/"
+
     fun itemsUrl(appIds: List<Int>, country: String): String {
         val input = JSONObject()
             .put("ids", JSONArray(appIds.map { JSONObject().put("appid", it) }))
@@ -256,9 +259,24 @@ object Steam {
         }
     }
 
+    /**
+     * GetNumberOfCurrentPlayers. Steam answers 0 for some games even while thousands are playing,
+     * so 0 counts as "not known" rather than "nobody".
+     */
     fun parsePlayers(json: String): Long? {
         val r = JSONObject(json).optJSONObject("response") ?: return null
-        return if (r.optInt("result", 1) == 1 && r.has("player_count")) r.getLong("player_count") else null
+        return if (r.optInt("result", 1) == 1 && r.has("player_count")) r.getLong("player_count").takeIf { it > 0 } else null
+    }
+
+    /** GetGamesByConcurrentPlayers: players right now for each game on Steam's chart, by app. */
+    fun parseConcurrent(json: String): Map<Int, Long> {
+        val ranks = JSONObject(json).optJSONObject("response")?.optJSONArray("ranks") ?: return emptyMap()
+        return (0 until ranks.length()).mapNotNull { i ->
+            val r = ranks.optJSONObject(i) ?: return@mapNotNull null
+            val appId = r.optInt("appid", 0)
+            val players = r.optLong("concurrent_in_game", 0)
+            if (appId > 0 && players > 0) appId to players else null
+        }.toMap()
     }
 
     /** IStoreBrowseService/GetItems: names, pictures and prices by app. */
