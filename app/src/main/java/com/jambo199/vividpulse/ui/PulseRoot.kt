@@ -88,6 +88,7 @@ import com.jambo199.vividpulse.ui.settings.SettingsScreen
 import com.jambo199.vividpulse.ui.theme.Accents
 import com.jambo199.vividpulse.ui.theme.LocalPulseColors
 import com.jambo199.vividpulse.ui.tools.FpsScreen
+import com.jambo199.vividpulse.ui.tools.FreeRamScreen
 import com.jambo199.vividpulse.ui.tools.ScreenTestScreen
 import com.jambo199.vividpulse.ui.tools.SpeedTestScreen
 import com.jambo199.vividpulse.ui.tools.ToolsScreen
@@ -116,6 +117,7 @@ object Routes {
     const val TOUCH = "touchtest"
     const val FPS = "fps"
     const val SETTINGS = "settings"
+    const val FREE_RAM = "freeram"
     fun game(appId: Int) = "game/$appId"
 }
 
@@ -167,7 +169,7 @@ fun PulseRoot(requests: MutableStateFlow<String?>) {
                     page(Tab.GAMES.route) { GamesScreen(open) }
                     page(Tab.TOOLS.route) { ToolsScreen(open) }
                     page(Routes.CPU) { CpuScreen(back) }
-                    page(Routes.MEMORY) { MemoryScreen(back) }
+                    page(Routes.MEMORY) { MemoryScreen(back, open) }
                     page(Routes.BATTERY) { BatteryScreen(back) }
                     page(Routes.NETWORK) { NetworkScreen(back, open) }
                     page(Routes.THERMAL) { ThermalScreen(back) }
@@ -179,6 +181,9 @@ fun PulseRoot(requests: MutableStateFlow<String?>) {
                     page(Routes.TOUCH) { TouchTestScreen(back) }
                     page(Routes.FPS) { FpsScreen(back) }
                     page(Routes.SETTINGS) { SettingsScreen(back) }
+                    page(Routes.FREE_RAM) { FreeRamScreen(back) }
+                    // Opens and starts straight away (used by the automated test).
+                    page(Routes.FREE_RAM + "/start") { FreeRamScreen(back, autoStart = true) }
                     composable(
                         "game/{appId}",
                         arguments = listOf(navArgument("appId") { type = NavType.IntType }),

@@ -6,6 +6,7 @@ import com.jambo199.vividpulse.games.GamesRepository
 import com.jambo199.vividpulse.games.WatchStore
 import com.jambo199.vividpulse.system.DeviceSpecs
 import com.jambo199.vividpulse.system.LiveMonitor
+import com.jambo199.vividpulse.tools.RamBooster
 import com.jambo199.vividpulse.update.UpdateManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +29,7 @@ object Graph {
     val monitor by lazy { LiveMonitor(app) }
     val games by lazy { GamesRepository(app) }
     val watching by lazy { WatchStore(app) }
+    val booster by lazy { RamBooster(app, scope) }
     val updates by lazy { UpdateManager(app, scope) }
 
     private val specsLazy = lazy { DeviceSpecs(app, monitor.cpu) }

@@ -128,6 +128,11 @@ open_page speedtest; sleep 3
 tap "Start" && shot 31-speed-running 10
 shot 32-speed-done 24
 texts
+echo "-- free up RAM"
+open_page freeram; shot 37-free-ram 3
+open_page freeram/start; shot 37b-free-ram-running 5
+shot 37c-free-ram-done 16
+adb logcat -d | grep -E "RamBooster" | tail -3
 open_page fps; shot 33-smoothness 5
 open_page touchtest; sleep 2
 adb shell input swipe 200 800 900 1400 600
@@ -154,7 +159,7 @@ adb shell settings put system user_rotation 0
 
 echo "== Checking for crashes"
 adb logcat -d > "$OUT/logcat.txt"
-grep -E "Games|UpdateManager|vividpulse" "$OUT/logcat.txt" | grep -E " [EW] " | tail -30 || true
+grep -E "Games|UpdateManager|RamBooster|vividpulse" "$OUT/logcat.txt" | grep -E " [EW] " | tail -30 || true
 if grep -qE "FATAL EXCEPTION|ANR in $PKG" "$OUT/logcat.txt"; then
   echo "❌ The app crashed:"
   grep -A 40 -E "FATAL EXCEPTION|ANR in" "$OUT/logcat.txt" | head -150

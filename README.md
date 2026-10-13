@@ -25,7 +25,9 @@ opens and every few hours while it's open (Settings › Updates).
     charge** (time, % gained, % per hour, peak watts, energy) or how fast it's draining since unplugged
   - **Network** – live speeds, Wi-Fi standard (Wi-Fi 7…), band and channel, signal, link speed
   - **Heat** – Android's throttling forecast as a gauge and chart, plus tips for gaming sessions
-- **Device** – everything about the phone: name, Android and OriginOS versions, security update,
+- **Device** – everything about the phone: name, Android and OriginOS versions (worked out from
+  several of vivo's build properties, since phones on OriginOS often still carry the old Funtouch
+  names), vivo build number, security update,
   kernel, uptime and deep sleep, chip (e.g. Snapdragon 8 Elite) and its cores, display (resolution,
   refresh rates, HDR formats, size), cameras (megapixels, 35 mm-equivalent lens,
   aperture, stabilisation, 8K / 10-bit / RAW), every sensor with live readings, and features such
@@ -37,6 +39,12 @@ opens and every few hours while it's open (Settings › Updates).
   chart, price and discount, genres, Metacritic, screenshots, share, and buttons to open it in
   Steam or see its player history. **Star** a game to keep its live player count in *Your games*
   at the top of the page.
+- **Free up RAM** – asks Android to make room and shows every step as it happens: how memory
+  stands, tidying the app itself, briefly holding a large block of memory so Android drops cached
+  files, compresses idle memory into RAM+ and closes apps you haven't used in a while, handing it
+  all back, then before/after with what changed. It always keeps a safety margin free, so music
+  and anything with a notification keep running. (Since Android 14 apps can't close other apps
+  directly; this is how Android itself makes room.) From the Tools tab or the RAM page.
 - **Tools** – internet **speed test** (response time, jitter, download and upload on a springy
   speedometer, which Cloudflare server and provider, shareable, with your earlier results), **smoothness** meter (frames per second, late frames,
   refresh rate), **dead pixel** colours at full brightness, multi-finger **touch test**, sensors and a

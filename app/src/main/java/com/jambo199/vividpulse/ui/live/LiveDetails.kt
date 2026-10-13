@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatteryStd
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DeveloperBoard
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.NetworkCheck
@@ -211,7 +212,7 @@ private fun CoreTile(core: Int, live: LiveState?, accent: Accent, modifier: Modi
 }
 
 @Composable
-fun MemoryScreen(back: () -> Unit) {
+fun MemoryScreen(back: () -> Unit, open: (String) -> Unit) {
     val live by Graph.monitor.state.collectAsStateWithLifecycle()
     val m = live?.memory
     DetailPage("RAM", back, subtitle = m?.takeIf { it.total > 0 }?.let { "${MemInfo.marketedRamGb(it.total)} GB memory" }) {
@@ -235,6 +236,17 @@ fun MemoryScreen(back: () -> Unit) {
                 }
                 Spacer(Modifier.height(14.dp))
                 LiveChart(listOf(ChartLine(live?.memoryHistory.orEmpty(), Accents.memory)), live?.sampledAt ?: 0, live?.intervalMs ?: 1000, Modifier.fillMaxWidth().height(120.dp), max = 1f, visible = 90)
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth().entrance(1), accent = Accents.memory, onClick = { open(Routes.FREE_RAM) }) {
+                CardTitle(Icons.Rounded.CleaningServices, "Free up RAM", Accents.memory, trailing = "›")
+                Text(
+                    "Ask Android to close apps you haven't used in a while and make room, and watch what it does, step by step.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
             }
         }
         if (m != null && m.total > 0) {

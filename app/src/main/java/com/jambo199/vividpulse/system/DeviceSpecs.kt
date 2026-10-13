@@ -33,16 +33,28 @@ class DeviceSpecs(private val context: Context, private val cpu: CpuReader) {
         if (market.lowercase(Locale.US).startsWith(Build.MANUFACTURER.lowercase(Locale.US))) market else "$brand $market"
     }
 
-    /** "OriginOS 5" and the like, when the maker's own Android skin says what it is. */
+    /** The maker's build number, e.g. vivo's "PD2453F_EX_A_16.0.12.4.W30". */
+    val systemBuild: String? = listOf("ro.vivo.product.version", "ro.build.version.bbk")
+        .map { SysFs.prop(it) }.firstOrNull { it.isNotBlank() }
+
+    private val isVivo: Boolean = Build.MANUFACTURER.equals("vivo", ignoreCase = true) ||
+        Build.BRAND.equals("iqoo", ignoreCase = true) || SysFs.prop("ro.vivo.os.version").isNotBlank()
+
+    /** "OriginOS 6" and the like: the maker's own version of Android. */
     val skin: String? = run {
-        val vivoName = SysFs.prop("ro.vivo.os.name")
-        val vivoVersion = SysFs.prop("ro.vivo.os.version")
         val oneUi = SysFs.prop("ro.build.version.oneui").toIntOrNull()
         val hyperOs = SysFs.prop("ro.mi.os.version.name")
         val miui = SysFs.prop("ro.miui.ui.version.name")
         val coloros = SysFs.prop("ro.build.version.oplusrom")
         when {
-            vivoVersion.isNotBlank() -> "${vivoName.ifBlank { "OriginOS" }.replace("_", " ")} $vivoVersion".trim()
+            isVivo -> SkinNames.vivo(
+                displayId = SysFs.prop("ro.vivo.os.build.display.id"),
+                osName = SysFs.prop("ro.vivo.os.name"),
+                osVersion = SysFs.prop("ro.vivo.os.version"),
+                build = systemBuild.orEmpty(),
+                overseas = SysFs.prop("ro.vivo.product.overseas"),
+                androidMajor = Build.VERSION.RELEASE.substringBefore('.').toIntOrNull() ?: (Build.VERSION.SDK_INT - 20),
+            )
             oneUi != null -> "One UI ${oneUi / 10000}.${oneUi / 100 % 100}"
             hyperOs.isNotBlank() -> "HyperOS ${hyperOs.removePrefix("OS")}"
             miui.isNotBlank() -> "MIUI ${miui.removePrefix("V")}"
@@ -99,7 +111,7 @@ class DeviceSpecs(private val context: Context, private val cpu: CpuReader) {
                     SpecRow("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"),
                     skin?.let { SpecRow("System", it) },
                     SpecRow("Security update", Build.VERSION.SECURITY_PATCH.ifBlank { "Unknown" }),
-                    SpecRow("Build", Build.DISPLAY),
+                    SpecRow("Build", systemBuild ?: Build.DISPLAY),
                     SpecRow("Kernel", (System.getProperty("os.version") ?: "Unknown").substringBefore('-').ifBlank { "Unknown" }),
                     Build.getRadioVersion()?.takeIf { it.isNotBlank() }?.let { SpecRow("Baseband", it) },
                     SpecRow("Bootloader", Build.BOOTLOADER),
