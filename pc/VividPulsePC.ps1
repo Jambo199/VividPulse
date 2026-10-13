@@ -187,15 +187,18 @@ function Get-Specs {
     }
 }
 
+$script:MaxMhz = $null
+
 function Get-Live {
     $os = Get-CimInstance Win32_OperatingSystem
     $cores = @(Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -ErrorAction SilentlyContinue)
     $total = $cores | Where-Object { $_.Name -eq "_Total" } | Select-Object -First 1
     $perCore = @($cores | Where-Object { $_.Name -ne "_Total" } | Sort-Object { [int]$_.Name } | ForEach-Object { [double]$_.PercentProcessorTime })
     $info = Get-CimInstance Win32_PerfFormattedData_Counters_ProcessorInformation -Filter "Name='_Total'" -ErrorAction SilentlyContinue
-    $maxMhz = (Get-CimInstance Win32_Processor | Select-Object -First 1).MaxClockSpeed
+    # The base clock doesn't change: read it once.
+    if (-not $script:MaxMhz) { $script:MaxMhz = (Get-CimInstance Win32_Processor | Select-Object -First 1).MaxClockSpeed }
     $clock = $null
-    if ($info -and $info.PercentProcessorPerformance) { $clock = [math]::Round($maxMhz * $info.PercentProcessorPerformance / 100) }
+    if ($info -and $info.PercentProcessorPerformance) { $clock = [math]::Round($script:MaxMhz * $info.PercentProcessorPerformance / 100) }
     $gpu = Get-Nvidia
     if (-not $gpu) {
         # Other graphics cards: Windows' own GPU counters (no temperature).
@@ -449,6 +452,8 @@ while ($true) {
         $stream = $client.GetStream()
         $reader = New-Object System.IO.StreamReader($stream, [Text.Encoding]::ASCII, $false, 1024, $true)
         $request = $reader.ReadLine()
+        # A connection that sends nothing (a port check): nothing to answer.
+        if ([string]::IsNullOrEmpty($request)) { continue }
         $code = $null
         while ($true) {
             $line = $reader.ReadLine()
