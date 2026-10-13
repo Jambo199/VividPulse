@@ -48,16 +48,24 @@ object GsmArena {
 
     fun searchUrl(phone: String): String = BASE + "results.php3?sQuickSearch=yes&sName=" + URLEncoder.encode(phone, "UTF-8")
 
-    /** The phones a search found: name and page address. */
-    fun parseResults(html: String): List<Pair<String, String>> {
-        val start = html.indexOf("class=\"makers\"").takeIf { it >= 0 } ?: return emptyList()
-        val end = html.indexOf("</ul>", start).takeIf { it > start } ?: html.length
-        return Regex("""<a href="([^"]+\.php)"[^>]*>.*?<span>(.*?)</span>""", RegexOption.DOT_MATCHES_ALL)
-            .findAll(html.substring(start, end))
-            .map { m -> text(m.groupValues[2]).replace('\n', ' ').replace(Regex("\\s+"), " ").trim() to absolute(m.groupValues[1]) }
-            .filter { it.first.isNotEmpty() }
+    /**
+     * The phones on a search page: name and page address. Every link to a phone page counts
+     * (phone pages are "maker_model-1234.php"; news and reviews have more to their names), so it
+     * reads the desktop and the mobile site alike; [bestMatch] then keeps only this phone.
+     */
+    fun parseResults(html: String): List<Pair<String, String>> =
+        Regex("""<a href="(?:https://(?:www|m)\.gsmarena\.com/)?([a-z0-9_]+-\d+\.php)"[^>]*>(.*?)</a>""", RegexOption.DOT_MATCHES_ALL)
+            .findAll(html)
+            .mapNotNull { m ->
+                val inner = m.groupValues[2]
+                val name = text(inner).replace('\n', ' ').replace(Regex("\\s+"), " ").trim().ifBlank {
+                    // A picture-only link: its title starts with the phone's name.
+                    Regex("""title="([^"]+)"""").find(inner)?.groupValues?.get(1)?.substringBefore(" Android")?.substringBefore(". ")?.trim()
+                }
+                if (name.isNullOrBlank()) null else name to absolute(m.groupValues[1])
+            }
+            .distinctBy { it.second }
             .toList()
-    }
 
     /**
      * The result that is this phone: the same name, or failing that the closest one holding every

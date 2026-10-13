@@ -66,6 +66,13 @@ android {
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
+        // Failures in full, and what tests print (e.g. what GSMArena's live pages gave).
+        unitTests.all {
+            it.testLogging {
+                showStandardStreams = true
+                exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+            }
+        }
     }
     packaging {
         resources {

@@ -47,7 +47,8 @@ jobs:
           curl -sSL -m 30 -A "$UA" -o ci-gsm/search.html "https://www.gsmarena.com/results.php3?sQuickSearch=yes&sName=vivo+X200+Ultra" || true
           curl -sSL -m 30 -A "$UA" -o ci-gsm/phone.html "https://www.gsmarena.com/vivo_x200_ultra-13762.php" || true
           ls -la ci-gsm
-          echo "--- search results:"; grep -A6 'class="makers"' ci-gsm/search.html | head -12 | cut -c1-400
+          echo "--- search page: $(grep -c . ci-gsm/search.html) lines, title: $(grep -o '<title>[^<]*' ci-gsm/search.html)"
+          echo "--- links to phone pages on it:"; grep -oE '<a href="[a-z0-9_]+-[0-9]+\.php"[^>]*>.{0,200}' ci-gsm/search.html | head -15 | cut -c1-300
           echo "--- specs on the phone page:"; grep -oE 'data-spec="[a-z0-9]+"[^>]*>[^<]{0,160}' ci-gsm/phone.html | head -60
 
       - name: Unit tests and release APK
