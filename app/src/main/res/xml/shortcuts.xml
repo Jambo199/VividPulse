@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_speed"
+        android:shortcutId="speedtest"
+        android:shortcutShortLabel="@string/shortcut_speed">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.jambo199.vividpulse.MainActivity"
+            android:targetPackage="com.jambo199.vividpulse">
+            <extra
+                android:name="route"
+                android:value="speedtest" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_games"
+        android:shortcutId="games"
+        android:shortcutShortLabel="@string/shortcut_games">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.jambo199.vividpulse.MainActivity"
+            android:targetPackage="com.jambo199.vividpulse">
+            <extra
+                android:name="route"
+                android:value="games" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_battery"
+        android:shortcutId="battery"
+        android:shortcutShortLabel="@string/shortcut_battery">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.jambo199.vividpulse.MainActivity"
+            android:targetPackage="com.jambo199.vividpulse">
+            <extra
+                android:name="route"
+                android:value="battery" />
+        </intent>
+    </shortcut>
+</shortcuts>

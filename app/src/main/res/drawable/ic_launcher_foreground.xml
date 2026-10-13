@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A gauge ring with a heartbeat line through it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M37.4,70.6A23.5,23.5 0,1 1,70.6 70.6"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeColor="#3322D3EE" />
+    <path
+        android:pathData="M37.4,70.6A23.5,23.5 0,0 1,54 30.5A23.5,23.5 0,0 1,77.5 54"
+        android:strokeWidth="5"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:endX="77.5"
+                android:endY="54"
+                android:startX="37.4"
+                android:startY="70.6"
+                android:type="linear">
+                <item android:color="#FF22D3EE" android:offset="0" />
+                <item android:color="#FF8B5CF6" android:offset="0.55" />
+                <item android:color="#FFFF4FD8" android:offset="1" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path
+        android:pathData="M33,56H44L48.5,45L55,66L60,52L63,56H75"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeColor="#FFFFFFFF" />
+</vector>

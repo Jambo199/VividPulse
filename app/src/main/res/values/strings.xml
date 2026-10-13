@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Vivid Pulse</string>
+    <string name="shortcut_speed">Speed test</string>
+    <string name="shortcut_games">Steam charts</string>
+    <string name="shortcut_battery">Battery</string>
+</resources>
