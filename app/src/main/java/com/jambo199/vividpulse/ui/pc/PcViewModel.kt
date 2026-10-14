@@ -14,6 +14,7 @@ import com.jambo199.vividpulse.pc.PcSpecs
 import com.jambo199.vividpulse.pc.PcSteam
 import com.jambo199.vividpulse.pc.WrongCodeException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class Link { CONNECTING, ONLINE, OFFLINE, WRONG_CODE }
 
@@ -57,7 +59,24 @@ class PcViewModel : ViewModel() {
     private val repo = Graph.pc
     val pairing = repo.pairing
 
-    private val _state = MutableStateFlow(cached())
+    // What the PC last sent is read from the phone's storage in the background (a big Steam
+    // library takes a moment), then filled in wherever nothing newer has arrived yet.
+    private val _state = MutableStateFlow(PcState(lastSeen = repo.lastSeen()))
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            val kept = cached()
+            _state.update { s ->
+                s.copy(
+                    specs = s.specs ?: kept.specs,
+                    live = s.live ?: kept.live,
+                    steam = s.steam ?: kept.steam,
+                    library = s.library ?: kept.library,
+                    downloads = s.downloads ?: kept.downloads,
+                )
+            }
+        }
+    }
     val state: StateFlow<PcState> = _state.asStateFlow()
 
     private val _setup = MutableStateFlow(PairingState())
@@ -183,7 +202,7 @@ class PcViewModel : ViewModel() {
                 )
             }
             if (e == null) {
-                _state.value = cached().copy(link = Link.ONLINE, lastSeen = System.currentTimeMillis())
+                _state.value = withContext(Dispatchers.IO) { cached() }.copy(link = Link.ONLINE, lastSeen = System.currentTimeMillis())
                 refreshAll()
                 PcWatch.schedule(Graph.app)
             }
