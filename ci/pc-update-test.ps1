@@ -21,8 +21,11 @@ function Publish($build, $sha) {
     $o = [ordered]@{ build = $build; version = "2.$build"; zip = "VividPulsePC.zip"; sha256 = $sha; notes = "A test build" }
     [IO.File]::WriteAllText("$site\pc-version.json", ($o | ConvertTo-Json))
 }
+# Waits for the program itself only (Start-Process -Wait would also wait for the copy it starts).
 function Update() {
-    $p = Start-Process "$app\VividPulsePC.exe" -ArgumentList "--update --headless" -Wait -PassThru
+    $p = Start-Process "$app\VividPulsePC.exe" -ArgumentList "--update --headless" -PassThru
+    $null = $p.Handle
+    if (-not $p.WaitForExit(120000)) { $p.Kill(); return "still running after 2 minutes" }
     return $p.ExitCode
 }
 $original = (Get-FileHash "$app\VividPulsePC.exe").Hash
@@ -57,9 +60,35 @@ else { Write-Host "FAIL left behind: $($left -join ', ')"; $failures += "cleanup
 if ((Get-Content $log -Raw) -match "started after updating") { Write-Host "ok   its log says it started after updating" } else { $failures += "log" }
 
 Get-Process VividPulsePC -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+
+Write-Host "== A newer build, while it's running and answering (as when you click Update)"
+Publish ($published.build + 1) $published.sha256
+$restarts = ([regex]::Matches((Get-Content $log -Raw), "started after updating")).Count
+$p = Start-Process "$app\VividPulsePC.exe" -ArgumentList "--headless --update-soon" -PassThru
+$null = $p.Handle
+$answered = $false
+for ($i = 0; $i -lt 15 -and -not $answered; $i++) {
+    Start-Sleep -Seconds 1
+    try { $null = Invoke-RestMethod "http://127.0.0.1:47800/hello" -TimeoutSec 3; $answered = $true } catch { }
+}
+if ($answered) { Write-Host "ok   the running copy answers" } else { Write-Host "FAIL the running copy didn't answer"; $failures += "running" }
+if ($p.WaitForExit(90000)) { Write-Host "ok   it closed to make way (exit $($p.ExitCode))" } else { Write-Host "FAIL it didn't close"; $p.Kill(); $failures += "close" }
+$hello = $null
+for ($i = 0; $i -lt 30 -and -not $hello; $i++) {
+    Start-Sleep -Seconds 1
+    try { $hello = Invoke-RestMethod "http://127.0.0.1:47800/hello" -TimeoutSec 3 } catch { }
+}
+$now = ([regex]::Matches((Get-Content $log -Raw), "started after updating")).Count
+if ($hello -and $now -gt $restarts) { Write-Host "ok   the new copy took over the port and answers" }
+else { Write-Host "FAIL no answer from the new copy (restarts in the log: $restarts -> $now)"; $failures += "takeover" }
+for ($i = 0; $i -lt 20 -and (Test-Path "$app\VividPulsePC.old.exe"); $i++) { Start-Sleep -Seconds 1 }
+if (Test-Path "$app\VividPulsePC.old.exe") { Write-Host "FAIL the old copy was left behind"; $failures += "cleanup 2" } else { Write-Host "ok   the old copy is gone" }
+
+Get-Process VividPulsePC -ErrorAction SilentlyContinue | Stop-Process -Force
 Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
 Write-Host "== Its log"
-Get-Content $log -Tail 15 | Write-Host
+Get-Content $log -Tail 25 | Write-Host
 if ($failures.Count -gt 0) { throw "Failed: $($failures -join ', ')" }
 Write-Host "All update checks passed"
 exit 0

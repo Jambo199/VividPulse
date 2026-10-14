@@ -198,9 +198,12 @@ namespace VividPulsePC
             return exe;
         }
 
-        /// <summary>Starts the new program; it waits for this one to close.</summary>
+        /// <summary>
+        /// Starts the new program; it waits for this one to close. Through the shell, so it doesn't
+        /// inherit this one's network ports (it needs them once this one has gone).
+        /// </summary>
         public static void Restart(string exe, string arguments) =>
-            Process.Start(new ProcessStartInfo(exe, ("--after-update " + arguments).Trim()) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe) });
+            Process.Start(new ProcessStartInfo(exe, ("--after-update " + arguments).Trim()) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(exe) });
 
         /// <summary>After an update: the old program file goes once it has closed.</summary>
         public static void CleanUp()

@@ -76,6 +76,15 @@ namespace VividPulsePC
                 }
                 if (headless)
                 {
+                    // For the automated test: update as the window's button does, with everything running.
+                    if (flags.Contains("--update-soon"))
+                    {
+                        ThreadPool.QueueUserWorkItem(_ =>
+                        {
+                            Thread.Sleep(3000);
+                            if (UpdateNow(headless: true) == 0) Environment.Exit(0);
+                        });
+                    }
                     Thread.Sleep(Timeout.Infinite);
                     return 0;
                 }

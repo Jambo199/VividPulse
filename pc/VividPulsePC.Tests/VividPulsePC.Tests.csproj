@@ -6,7 +6,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
-    <NoWarn>CA1416</NoWarn>
+    <NoWarn>CA1416;CS0649</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../VividPulsePC/Json.cs" />
