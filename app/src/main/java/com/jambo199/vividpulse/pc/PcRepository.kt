@@ -66,6 +66,42 @@ class PcRepository(context: Context) {
 
     fun cachedSteam(): PcSteam? = runCatching { PcParse.steam(File(dir, "steam.json").readText()) }.getOrNull()
 
+    /** Steam's downloads on the PC as last seen. */
+    fun cachedDownloads(): PcDownloads? = runCatching { PcParse.downloads(File(dir, "downloads.json").readText()) }.getOrNull()
+
+    /** Steam's downloads and updates on the PC (and those that just finished). The first version of Vivid Pulse PC has none: an error. */
+    suspend fun downloads(): PcDownloads = withContext(Dispatchers.IO) {
+        val json = get("/downloads", timeoutMs = 8_000)
+        val d = PcParse.downloads(json)
+        File(dir, "downloads.json").writeText(json)
+        d
+    }
+
+    // ---- PC alerts: settings and what's been said already
+
+    /** Tell me when a Steam download finishes on the PC. */
+    var alertDownloads: Boolean
+        get() = prefs.getBoolean("alertDownloads", true)
+        set(v) { prefs.edit().putBoolean("alertDownloads", v).apply() }
+
+    /** Tell me when the PC's graphics card passes [heatLimit]. */
+    var alertHeat: Boolean
+        get() = prefs.getBoolean("alertHeat", true)
+        set(v) { prefs.edit().putBoolean("alertHeat", v).apply() }
+
+    var heatLimit: Int
+        get() = prefs.getInt("heatLimit", 85)
+        set(v) { prefs.edit().putInt("heatLimit", v).apply() }
+
+    var lastHeatAlertAt: Long
+        get() = prefs.getLong("lastHeatAlert", 0)
+        set(v) { prefs.edit().putLong("lastHeatAlert", v).apply() }
+
+    /** Finished downloads already told about ("appId@time"). */
+    var toldFinished: Set<String>
+        get() = prefs.getStringSet("toldFinished", emptySet()).orEmpty()
+        set(v) { prefs.edit().putStringSet("toldFinished", v.toList().takeLast(60).toSet()).apply() }
+
     /** The last live readings the PC sent. */
     fun cachedLive(): PcLive? = runCatching { PcParse.live(File(dir, "live.json").readText()) }.getOrNull()
 

@@ -24,12 +24,16 @@ object Notify {
     const val REPORTS = "reports"
     /** Starred games on sale, and Steam's big sales. */
     const val DEALS = "deals"
+    /** The paired PC: Steam downloads finishing, running hot. */
+    const val PC = "pc"
 
     const val ID_CHARGING = 100
     const val ID_LIMIT = 101
     const val ID_OVERNIGHT = 102
     const val ID_BIG_SALE = 103
+    const val ID_PC_HEAT = 104
     private const val ID_GAME_BASE = 10_000
+    private const val ID_PC_BASE = 2_000_000
 
     fun channels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -48,6 +52,9 @@ object Notify {
                 },
                 NotificationChannel(DEALS, "Game deals", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     description = "Starred games on sale, and Steam's big sales"
+                },
+                NotificationChannel(PC, "PC alerts", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "Steam downloads finishing on your PC, and your PC running hot"
                 },
             ),
         )
@@ -86,4 +93,7 @@ object Notify {
 
     /** One notification per starred game. */
     fun gameId(appId: Int): Int = ID_GAME_BASE + (appId % 1_000_000)
+
+    /** One notification per game finishing on the PC. */
+    fun pcId(appId: Int): Int = ID_PC_BASE + (appId % 1_000_000)
 }

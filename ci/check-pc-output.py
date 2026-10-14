@@ -81,6 +81,13 @@ check(len(collections) == 3, "the deleted collection left out")
 library = set(as_list(steam.get("libraryAppIds"), "libraryAppIds"))
 check({730, 570, 1091500, 271590, 1808500} <= library, f"library app IDs: {sorted(library)}")
 
+downloads = load("downloads.json")
+items = as_list(downloads.get("downloads"), "downloads")
+print(f"     downloads: {items}")
+check([d.get("name") for d in items] == ["ARC Raiders", "Counter-Strike 2"], "downloads: ARC Raiders, then Counter-Strike 2")
+check(items[0].get("state") == "downloading" and items[0].get("bytesDone") == 9000000000 and items[0].get("bytesTotal") == 36000000000, "ARC Raiders downloading, 9 of 36 GB")
+check(items[1].get("state") == "queued", "Counter-Strike 2 update queued")
+
 for n in notes:
     print("note " + n)
 if problems:

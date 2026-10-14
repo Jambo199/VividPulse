@@ -276,6 +276,27 @@ if tap "Installed ("; then
 fi
 fling_up 4; shot 62d-pc-specs 3
 fling_up 4; shot 62e-pc-specs-more 3
+fling_up 6; shot 62f-pc-alerts-card 2
+echo "-- Steam downloads, and PC alerts while the app is in the background"
+open_page tools; sleep 1
+open_page pc; sleep 8
+swipe_up; shot 62g-pc-downloads 2
+texts
+adb shell input keyevent KEYCODE_HOME
+sleep 3
+curl -s "http://127.0.0.1:47800/_finish" > /dev/null
+curl -s "http://127.0.0.1:47800/_hot" > /dev/null
+for _ in $(seq 1 10); do
+  sleep 10
+  if notes | grep -q "ready to play" && notes | grep -q "running hot"; then break; fi
+done
+notes
+notes | grep -q "ready to play" && echo "   ✅ download finished alert" || echo "   ⚠️ no download finished alert"
+notes | grep -q "running hot" && echo "   ✅ running hot alert" || echo "   ⚠️ no running hot alert"
+adb shell cmd statusbar expand-notifications; sleep 2
+adb exec-out screencap -p > "$OUT/62h-pc-alerts.png" && echo "📸 62h-pc-alerts"
+adb shell cmd statusbar collapse
+adb logcat -d | grep -E "WM-.*PcWatch|PcWatchWorker" | tail -5
 echo "-- the PC goes away: the page keeps what it had, marked offline"
 kill "$PC_PID" 2>/dev/null
 open_page tools; sleep 1

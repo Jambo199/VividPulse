@@ -1,3 +1,5 @@
-pc/*.cmd text eol=crlf
-pc/*.ps1 text eol=crlf
 pc/*.txt text eol=crlf
+pc/**/*.cs text eol=crlf
+pc/**/*.csproj text eol=crlf
+pc/**/*.manifest text eol=crlf
+pc/**/*.ico binary

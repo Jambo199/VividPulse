@@ -1,10 +1,14 @@
 package com.jambo199.vividpulse.ui.pc
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -37,7 +41,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.DesktopWindows
 import androidx.compose.material.icons.rounded.DeveloperBoard
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Memory
+import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Monitor
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Search
@@ -49,6 +55,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -79,7 +86,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.jambo199.vividpulse.Graph
+import com.jambo199.vividpulse.games.Steam
 import com.jambo199.vividpulse.pc.LibraryEntry
+import com.jambo199.vividpulse.pc.PcDownload
+import com.jambo199.vividpulse.pc.PcDownloads
 import com.jambo199.vividpulse.pc.PcClient
 import com.jambo199.vividpulse.pc.PcLibrary
 import com.jambo199.vividpulse.pc.PcFound
@@ -201,11 +211,13 @@ private fun LazyListScope.pcPage(
 ) {
     item { StatusCard(p, state, onNewCode, Modifier.entrance(1)) }
     state.live?.let { live -> item { LiveCard(live, state, Modifier.entrance(2)) } }
+    state.downloads?.takeIf { it.downloads.isNotEmpty() }?.let { d -> item(key = "downloads") { DownloadsCard(d, state, open) } }
     libraryItems(state, vm, p, open, shelf, onShelf)
     state.specs?.let { specs ->
         item { SectionHeader("Inside your PC", subtitle = listOfNotNull(specs.name, model(specs)).joinToString(" · ")) }
         specCards(specs)
     }
+    item(key = "alerts") { PcAlertsCard(vm, gpuTempKnown = state.live?.gpu?.tempC != null, oldProgram = state.link == Link.ONLINE && state.downloads == null) }
     item {
         Text(
             "Forget this PC",
@@ -241,7 +253,7 @@ private fun SetupCard(modifier: Modifier) {
             PillButton("Share link", Accents.brand, { share(context, url) })
             PillButton("Copy", Accents.download, { copy(context, url) })
         }
-        Step(2, "Unzip it and open “Start Vivid Pulse PC”", "If Windows asks, choose More info › Run anyway, and allow it on private networks. It shows a 6-digit code.")
+        Step(2, "Unzip it and open VividPulsePC", "If Windows asks, choose More info › Run anyway, and allow it on private networks. It shows a 6-digit code, and stays by the clock.")
         Step(3, "Find it below", "Phone and PC need to be on the same Wi-Fi.")
     }
 }
@@ -505,6 +517,127 @@ private fun LoadRing(label: String, value: Float, accent: Accent) {
             AnimatedNumber(value * 100, { "${it.roundToInt()}%" }, MaterialTheme.typography.titleMedium)
         }
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+// ---------------------------------------------------------------- Steam downloads and alerts
+
+@Composable
+private fun DownloadsCard(d: PcDownloads, state: PcState, open: (String) -> Unit) {
+    val fresh = state.link == Link.ONLINE
+    val context = LocalContext.current
+    GlassCard(Modifier.fillMaxWidth(), accent = Accents.download) {
+        CardTitle(Icons.Rounded.Download, "Steam downloads", Accents.download, trailing = if (fresh) "live" else "as last seen")
+        Column(Modifier.alpha(if (fresh) 1f else 0.6f)) {
+            d.downloads.forEach { item ->
+                Row(
+                    Modifier.padding(top = 14.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).bouncyClick { open(Routes.game(item.appId)) },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context).data(Steam.headerFallback(item.appId)).crossfade(200).build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.width(86.dp).aspectRatio(460f / 215f).clip(RoundedCornerShape(10.dp)).background(LocalPulseColors.current.track),
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(item.name ?: "App ${item.appId}", style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            downloadLine(item),
+                            style = MaterialTheme.typography.bodySmall.merge(Numbers),
+                            color = if (item.state == "downloading") Accents.download.start else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                        )
+                    }
+                }
+                item.fraction?.let { BarMeter(it, Accents.download, Modifier.fillMaxWidth().padding(top = 8.dp).height(6.dp)) }
+            }
+        }
+    }
+}
+
+/** "Downloading · 25% · 9 of 36 GB · 12.4 MB/s · about 35 min left". */
+private fun downloadLine(d: PcDownload): String {
+    val pct = d.fraction?.let { "${(it * 100).roundToInt()}%" }
+    return when (d.state) {
+        "downloading" -> listOfNotNull(
+            "Downloading",
+            pct,
+            if (d.bytesTotal > 0) "${Format.bytes(d.bytesDone)} of ${Format.bytes(d.bytesTotal)}" else null,
+            d.bytesPerSec.takeIf { it > 0 }?.let { Format.rate(it) },
+            d.secondsLeft?.let { "about ${Format.minutes(((it + 59) / 60).toInt().coerceAtLeast(1))} left" },
+        ).joinToString(" · ")
+        "installing" -> listOfNotNull("Installing", pct).joinToString(" · ")
+        "paused" -> listOfNotNull("Paused", pct).joinToString(" · ")
+        else -> listOfNotNull("Queued", d.bytesTotal.takeIf { it > 0 }?.let { Format.bytes(it) + " to download" }).joinToString(" · ")
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PcAlertsCard(vm: PcViewModel, gpuTempKnown: Boolean, oldProgram: Boolean) {
+    val alerts by vm.alerts.collectAsStateWithLifecycle()
+    val settings by Graph.settings.state.collectAsStateWithLifecycle()
+    var pending by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        pending?.invoke()
+        pending = null
+    }
+    fun turnOn(apply: () -> Unit) {
+        if (Build.VERSION.SDK_INT >= 33) {
+            pending = apply
+            askNotify.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            apply()
+        }
+    }
+    GlassCard(Modifier.fillMaxWidth(), accent = Accents.storage) {
+        CardTitle(Icons.Rounded.NotificationsActive, "PC alerts", Accents.storage)
+        AlertToggle(
+            "When a download finishes",
+            if (oldProgram) "Needs the new Vivid Pulse PC (the one with the icon by the clock)" else "When a Steam game finishes downloading or updating on your PC",
+            alerts.downloads,
+        ) { on -> if (on) turnOn { vm.setAlerts(downloads = true) } else vm.setAlerts(downloads = false) }
+        AlertToggle(
+            "When the graphics card runs hot",
+            if (gpuTempKnown) "When it passes the temperature below" else "Works with NVIDIA graphics cards (others don't share their temperature)",
+            alerts.heat,
+        ) { on -> if (on) turnOn { vm.setAlerts(heat = true) } else vm.setAlerts(heat = false) }
+        if (alerts.heat) {
+            FlowRow(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(80, 85, 90).forEach { c ->
+                    val on = c == alerts.limit
+                    Box(
+                        Modifier
+                            .clip(CircleShape)
+                            .background(if (on) Color.Transparent else LocalPulseColors.current.track.copy(alpha = 0.5f))
+                            .background(Accents.storage.brush, alpha = if (on) 1f else 0f)
+                            .bouncyClick { vm.setAlerts(limit = c) }
+                            .padding(horizontal = 16.dp, vertical = 9.dp),
+                    ) {
+                        Text(Format.temperature(c.toFloat(), settings.fahrenheit).replace(".0", ""), style = MaterialTheme.typography.labelLarge, color = if (on) Color.White else MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+            }
+        }
+        Text(
+            "Your phone looks every 15 minutes, and every 20 seconds while something's downloading or you're playing.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 10.dp),
+        )
+    }
+}
+
+@Composable
+private fun AlertToggle(title: String, note: String, on: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(end = 8.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(on, onChange)
     }
 }
 

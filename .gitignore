@@ -9,3 +9,5 @@ captures/
 .cxx/
 app/src/main/assets/changelog.json
 ci-gsm/
+pc/**/bin/
+pc/**/obj/

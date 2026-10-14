@@ -32,6 +32,7 @@ object Background {
             PeriodicWorkRequestBuilder<DealsWorker>(6, TimeUnit.HOURS).setConstraints(online).build(),
         )
         if (Graph.settings.current.chargeCompanion) ChargeWatch.start(context) else ChargeWatch.stop(context)
+        PcWatch.schedule(context)
     }
 
     /** Checks starred games' prices (and refreshes the deals widget) now. */

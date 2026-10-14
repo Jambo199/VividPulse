@@ -80,6 +80,35 @@ data class PcSteam(
         get() = collections.firstOrNull { !it.dynamic && it.appIds.isNotEmpty() && it.name.contains("purchas", ignoreCase = true) }
 }
 
+/** A Steam download or update on the PC. [state] is "downloading", "installing", "paused" or "queued". */
+data class PcDownload(
+    val appId: Int,
+    val name: String?,
+    val state: String,
+    val bytesDone: Long,
+    val bytesTotal: Long,
+    val stagedDone: Long,
+    val stagedTotal: Long,
+    val bytesPerSec: Long,
+) {
+    /** How far along (0..1), when Steam says. */
+    val fraction: Float?
+        get() = when {
+            state == "installing" && stagedTotal > 0 -> stagedDone.toFloat() / stagedTotal
+            bytesTotal > 0 -> bytesDone.toFloat() / bytesTotal
+            else -> null
+        }?.coerceIn(0f, 1f)
+
+    /** Seconds left at the current speed. */
+    val secondsLeft: Long?
+        get() = if (state == "downloading" && bytesPerSec > 0 && bytesTotal > bytesDone) (bytesTotal - bytesDone) / bytesPerSec else null
+}
+
+/** A download that finished (on the PC's clock). */
+data class PcFinished(val appId: Int, val name: String?, val at: Long)
+
+data class PcDownloads(val at: Long, val downloads: List<PcDownload>, val finished: List<PcFinished>)
+
 /** Reads what Vivid Pulse PC sends. PowerShell writes numbers as floats and lists of one as lists. */
 object PcParse {
     fun found(json: String, host: String): PcFound? = runCatching {
@@ -151,6 +180,30 @@ object PcParse {
                 PcCollection(c.str("id"), name, c.ints("appIds"), c.optBoolean("dynamic"))
             },
             libraryAppIds = o.ints("libraryAppIds"),
+        )
+    }
+
+    fun downloads(json: String): PcDownloads {
+        val o = JSONObject(json)
+        return PcDownloads(
+            at = o.long("at") ?: System.currentTimeMillis(),
+            downloads = o.objects("downloads").mapNotNull { d ->
+                val id = d.int("appId") ?: return@mapNotNull null
+                PcDownload(
+                    appId = id,
+                    name = d.str("name"),
+                    state = d.str("state") ?: "queued",
+                    bytesDone = d.long("bytesDone") ?: 0,
+                    bytesTotal = d.long("bytesTotal") ?: 0,
+                    stagedDone = d.long("stagedDone") ?: 0,
+                    stagedTotal = d.long("stagedTotal") ?: 0,
+                    bytesPerSec = d.long("bytesPerSec") ?: 0,
+                )
+            },
+            finished = o.objects("finished").mapNotNull { f ->
+                val id = f.int("appId") ?: return@mapNotNull null
+                PcFinished(id, f.str("name"), f.long("at") ?: 0)
+            },
         )
     }
 

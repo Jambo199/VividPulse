@@ -51,16 +51,19 @@ lists every version with what it changed, each marked as a **major**, **minor** 
   Man Gaming), genres, Metacritic, screenshots, share, and buttons to open it in Steam or see its
   player history. **Star** a game to keep its live player count in *Your games* and get a **price
   alert** when it goes on sale or drops below a price you pick (on Steam, or anywhere).
-- **PC** – your Windows PC on your phone, through **Vivid Pulse PC** (the `pc` folder, published
-  as `VividPulsePC.zip` next to the app): its specs (processor, graphics cards, memory sticks,
+- **PC** – your Windows PC on your phone, through **Vivid Pulse PC** (a small Windows program in
+  `pc/VividPulsePC`, published as `VividPulsePC.zip` next to the app; it sits by the clock, starts
+  with Windows and needs nothing installed): its specs (processor, graphics cards, memory sticks,
   drives, motherboard, screens, Windows version), live CPU / GPU / RAM use with per-thread bars,
   GPU temperature, power and fan (NVIDIA), network speed and what you're playing, and your Steam
   library as two collections, **Purchased** (your own "Purchased" collection if you have one,
   otherwise the paid games in your library) and **Installed**, with covers, sizes and hours played.
-  Tap a game for its page, or ▶ to start it on the PC. The phone keeps whatever the PC last sent:
+  Tap a game for its page, or ▶ to start it on the PC. **Steam downloads** show with progress,
+  speed and time left, and **PC alerts** tell you when a download finishes and when the graphics
+  card runs hot (NVIDIA), even with the app closed. The phone keeps whatever the PC last sent:
   while the PC is off the tab still shows it, marked offline with when it was last updated, and
-  it starts updating again by itself once Vivid Pulse PC is running. On the PC: unzip, double-click
-  **Start Vivid Pulse PC**, then in the app **PC › Find my PC** and type the 6-digit code it shows
+  it starts updating again by itself once Vivid Pulse PC is running. On the PC: unzip, open
+  **VividPulsePC**, then in the app **PC › Find my PC** and type the 6-digit code it shows
   (or type its address). It only answers on your local network, only to a phone with the code.
 - **Charging companion** – a live notification while charging (level, watts, time to your limit
   and to full), an alert at 80, 85, 90 or 95%, a history of every charge with its curve, and a
@@ -112,7 +115,7 @@ last; set the `SIGNING_*` environment variables to use your own key.
 | `app/.../alerts/` | Background work: charging companion, overnight report, sale alerts, notifications |
 | `app/.../widget/` | The home screen widgets |
 | `app/.../pc/` | Talking to Vivid Pulse PC: finding it on the network, pairing, specs, live readings, Steam library, kept on the phone for when the PC is off |
-| `pc/` | Vivid Pulse PC for Windows (PowerShell, nothing to install) |
+| `pc/VividPulsePC/` | Vivid Pulse PC for Windows (C#, .NET Framework that comes with Windows); `pc/VividPulsePC.Tests/` checks its Steam reading on any OS (`dotnet run`) |
 | `app/.../tools/` | Speed test against Cloudflare |
 | `app/.../update/` | The in-app updater |
 | `app/.../ui/` | Screens; animated gauges, live charts and cards in `ui/components/` |

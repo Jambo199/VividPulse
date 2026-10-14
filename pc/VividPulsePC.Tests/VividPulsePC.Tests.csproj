@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Checks Vivid Pulse PC's file reading (Steam's files, JSON) on any OS: dotnet run. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <NoWarn>CA1416</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../VividPulsePC/Json.cs" />
+    <Compile Include="../VividPulsePC/Vdf.cs" />
+    <Compile Include="../VividPulsePC/SteamReader.cs" />
+    <Compile Include="../VividPulsePC/Steam.cs" />
+    <Compile Include="../VividPulsePC/Log.cs" />
+    <Compile Include="../VividPulsePC/Config.cs" />
+  </ItemGroup>
+</Project>

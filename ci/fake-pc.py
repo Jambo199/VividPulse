@@ -4,7 +4,8 @@
   fake-pc.py --dir ci/pc-sample [--port 47800] [--code 123456]
 
 /hello needs no code; everything else needs the X-Pulse-Code header. /live moves its numbers a
-little each time, like a real PC. Each request is logged to stdout.
+little each time, like a real PC, and so do downloads. For the test, /_finish ends the first
+download and /_hot makes the graphics card hot (no code needed). Each request is logged to stdout.
 """
 import argparse
 import json
@@ -27,6 +28,21 @@ def load(name):
         return json.load(f)
 
 
+state = {"hot": False, "finished": [], "downloads": None}
+
+
+def downloads():
+    if state["downloads"] is None:
+        try:
+            state["downloads"] = load("downloads.json").get("downloads", [])
+        except FileNotFoundError:
+            state["downloads"] = []
+    for d in state["downloads"]:
+        if d.get("state") == "downloading" and d.get("bytesTotal"):
+            d["bytesDone"] = min(d["bytesTotal"], d["bytesDone"] + int(d.get("bytesPerSec", 0) * random.uniform(1.5, 2.5)))
+    return {"at": int(time.time() * 1000), "downloads": state["downloads"], "finished": state["finished"]}
+
+
 def live():
     o = load("live.json")
     o["at"] = int(time.time() * 1000)
@@ -38,6 +54,8 @@ def live():
     gpu = o.get("gpu")
     if isinstance(gpu, dict) and gpu.get("loadPercent") is not None:
         gpu["loadPercent"] = round(jiggle(gpu["loadPercent"], 6))
+    if isinstance(gpu, dict) and state["hot"]:
+        gpu["tempC"] = 91
     return o
 
 
@@ -56,6 +74,17 @@ class Handler(BaseHTTPRequestHandler):
         print(f"{time.strftime('%H:%M:%S')} {self.command} {self.path} code={self.headers.get('X-Pulse-Code')}", flush=True)
         if url.path == "/hello":
             return self.answer(200, load("hello.json"))
+        if url.path == "/_finish":
+            downloads()
+            if state["downloads"]:
+                d = state["downloads"].pop(0)
+                state["finished"].append({"appId": d["appId"], "name": d.get("name"), "at": int(time.time() * 1000)})
+                print(f"finished {d['appId']}", flush=True)
+            return self.answer(200, {"ok": True})
+        if url.path == "/_hot":
+            state["hot"] = True
+            print("hot", flush=True)
+            return self.answer(200, {"ok": True})
         if self.headers.get("X-Pulse-Code") != opts.code:
             return self.answer(401, {"error": "Wrong code"})
         if url.path == "/specs":
@@ -64,6 +93,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.answer(200, live())
         if url.path == "/steam":
             return self.answer(200, load("steam.json"))
+        if url.path == "/downloads":
+            return self.answer(200, downloads())
         if url.path == "/launch":
             app = parse_qs(url.query).get("appid", [""])[0]
             print(f"launch {app}", flush=True)

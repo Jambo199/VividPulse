@@ -1,8 +1,10 @@
 package com.jambo199.vividpulse
 
+import com.jambo199.vividpulse.alerts.PcAlertMath
 import com.jambo199.vividpulse.pc.LibraryEntry
 import com.jambo199.vividpulse.pc.LibraryJson
 import com.jambo199.vividpulse.pc.PcAddress
+import com.jambo199.vividpulse.pc.PcFinished
 import com.jambo199.vividpulse.pc.PcLibrary
 import com.jambo199.vividpulse.pc.PcParse
 import org.junit.Assert.assertEquals
@@ -112,5 +114,36 @@ class PcTest {
         assertEquals("gaming-pc.local" to 47800, PcAddress.parse("gaming-pc.local"))
         assertNull(PcAddress.parse(""))
         assertNull(PcAddress.parse("192.168.1.20:port"))
+    }
+
+    @Test
+    fun readsDownloads() {
+        val d = PcParse.downloads(sample("downloads.json"))
+        assertEquals(listOf(1808500, 730), d.downloads.map { it.appId })
+        val arc = d.downloads[0]
+        assertEquals("downloading", arc.state)
+        assertEquals(0.25f, arc.fraction!!, 0.001f)
+        // 27 GB to go at 31.5 MB/s: about 14 minutes.
+        assertEquals(857L, arc.secondsLeft)
+        assertEquals("queued", d.downloads[1].state)
+        assertNull(d.downloads[1].secondsLeft)
+        assertTrue(d.finished.isEmpty())
+    }
+
+    @Test
+    fun alertsOnceAndOnlyWhenRecent() {
+        val now = 1_760_000_000_000L
+        val fresh = PcFinished(1808500, "ARC Raiders", now - 60_000)
+        val old = PcFinished(730, "Counter-Strike 2", now - 5 * 3600_000L)
+        val d = PcParse.downloads("""{"at": $now, "downloads": [], "finished": [{"appId": 1808500, "name": "ARC Raiders", "at": ${now - 60_000}}, {"appId": 730, "at": ${now - 5 * 3600_000L}}]}""")
+        assertEquals(listOf(fresh.appId), PcAlertMath.newlyFinished(d, emptySet()).map { it.appId })
+        assertTrue(PcAlertMath.newlyFinished(d, setOf(PcAlertMath.key(fresh))).isEmpty())
+        assertEquals(old.appId, d.finished[1].appId)
+        // Hot: at or over the limit, at most once per half hour.
+        assertTrue(PcAlertMath.heatDue(86f, 85, 0, now))
+        assertTrue(!PcAlertMath.heatDue(84f, 85, 0, now))
+        assertTrue(!PcAlertMath.heatDue(90f, 85, now - 10 * 60_000, now))
+        assertTrue(PcAlertMath.heatDue(90f, 85, now - 31 * 60_000, now))
+        assertTrue(!PcAlertMath.heatDue(null, 85, 0, now))
     }
 }

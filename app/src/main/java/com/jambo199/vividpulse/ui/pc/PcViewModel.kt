@@ -3,6 +3,9 @@ package com.jambo199.vividpulse.ui.pc
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jambo199.vividpulse.Graph
+import com.jambo199.vividpulse.alerts.PcAlertMath
+import com.jambo199.vividpulse.alerts.PcWatch
+import com.jambo199.vividpulse.pc.PcDownloads
 import com.jambo199.vividpulse.pc.PcAddress
 import com.jambo199.vividpulse.pc.PcFound
 import com.jambo199.vividpulse.pc.PcLibrary
@@ -29,6 +32,8 @@ data class PcState(
     val live: PcLive? = null,
     val steam: PcSteam? = null,
     val library: PcLibrary? = null,
+    /** Steam's downloads on the PC; null when the PC's program is the first version (no downloads). */
+    val downloads: PcDownloads? = null,
     val libraryLoading: Boolean = false,
     /** Recent CPU and GPU load (0..1), oldest first, for the little charts. */
     val cpuHistory: List<Float> = emptyList(),
@@ -66,16 +71,40 @@ class PcViewModel : ViewModel() {
         live = repo.cachedLive(),
         steam = repo.cachedSteam(),
         library = repo.cachedLibrary(),
+        downloads = repo.cachedDownloads(),
     )
+
+    /** The PC alerts' settings, for the page. */
+    data class Alerts(val downloads: Boolean, val heat: Boolean, val limit: Int)
+
+    private val _alerts = MutableStateFlow(Alerts(repo.alertDownloads, repo.alertHeat, repo.heatLimit))
+    val alerts: StateFlow<Alerts> = _alerts.asStateFlow()
+
+    fun setAlerts(downloads: Boolean = repo.alertDownloads, heat: Boolean = repo.alertHeat, limit: Int = repo.heatLimit) {
+        repo.alertDownloads = downloads
+        repo.alertHeat = heat
+        repo.heatLimit = limit
+        _alerts.value = Alerts(downloads, heat, limit)
+        PcWatch.schedule(Graph.app)
+    }
 
     /** Keeps the page up to date while it's on screen; returns when it leaves. */
     suspend fun watch() {
         if (pairing.value == null) return
         var misses = 0
+        var ticks = 0
         while (true) {
             val result = runCatching { repo.live() }
             val live = result.getOrNull()
             if (live != null) {
+                // Steam's downloads every few seconds; the first version of the PC program has none.
+                if (ticks++ % 3 == 0) {
+                    runCatching { repo.downloads() }.onSuccess { d ->
+                        _state.update { it.copy(downloads = d) }
+                        // Something's going on: the background watcher takes over when the page closes.
+                        if (PcAlertMath.busy(d, live) && (repo.alertDownloads || repo.alertHeat)) PcWatch.start(Graph.app)
+                    }
+                }
                 val wasOnline = _state.value.link == Link.ONLINE
                 misses = 0
                 _state.update { s ->
@@ -156,6 +185,7 @@ class PcViewModel : ViewModel() {
             if (e == null) {
                 _state.value = cached().copy(link = Link.ONLINE, lastSeen = System.currentTimeMillis())
                 refreshAll()
+                PcWatch.schedule(Graph.app)
             }
             done(e == null)
         }
@@ -180,6 +210,7 @@ class PcViewModel : ViewModel() {
 
     fun forget() {
         repo.forget()
+        PcWatch.stop(Graph.app)
         _state.value = PcState()
         _setup.value = PairingState()
     }
