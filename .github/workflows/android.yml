@@ -19,11 +19,29 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      app_changed: ${{ steps.changed.outputs.app }}
     steps:
       - uses: actions/checkout@v4
         with:
           # The whole history and its build tags, for the changelog.
           fetch-depth: 0
+
+      # Phones are only offered a build when the phone app itself changed since the last one they
+      # were offered (tagged v1.0.N); a change to Vivid Pulse PC or the tests alone isn't one.
+      - name: Did the phone app change?
+        id: changed
+        run: |
+          last=$(git tag -l 'v1.0.*' --sort=-v:refname | head -1)
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] || [ -z "$last" ] \
+            || ! git diff --quiet "$last" HEAD -- app build.gradle.kts settings.gradle.kts gradle gradle.properties gradlew; then
+            echo "app=true" >> "$GITHUB_OUTPUT"
+            echo "The phone app changed since ${last:-the start}: this build is published for phones"
+            git diff --stat "$last" HEAD -- app build.gradle.kts settings.gradle.kts gradle gradle.properties gradlew 2>/dev/null | tail -3 || true
+          else
+            echo "app=false" >> "$GITHUB_OUTPUT"
+            echo "The phone app is the same as $last: phones won't be offered this build"
+          fi
 
       - name: Changelog (every build and what it changed, for the app's Changelog page)
         run: |
@@ -365,6 +383,19 @@ jobs:
 
       - name: Publish pre-release with the APK
         run: |
+          # Only Vivid Pulse PC (or the tests) changed: its files are updated, and phones aren't
+          # offered a new build of an unchanged app.
+          if [ "${{ needs.build.outputs.app_changed }}" = false ] && gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "The phone app hasn't changed since the last published build: only Vivid Pulse PC is updated"
+            if [ -f pc/VividPulsePC.zip ] && [ -f pc/pc-version.json ]; then
+              cp pc/VividPulsePC.zip pc/pc-version.json .
+              cat pc-version.json
+              gh release upload "$TAG" VividPulsePC.zip --repo "$GITHUB_REPOSITORY" --clobber \
+                && gh release upload "$TAG" pc-version.json --repo "$GITHUB_REPOSITORY" --clobber \
+                || { echo "::warning::Couldn't update Vivid Pulse PC on the release"; exit 1; }
+            fi
+            exit 0
+          fi
           BUILD=$((GITHUB_RUN_NUMBER + BUILD_OFFSET))
           cp dist/*.apk VividPulse.apk
           # This build's changelog entry: everything since the last published build, which is the
