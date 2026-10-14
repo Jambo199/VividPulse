@@ -272,10 +272,18 @@ texts
 if tap "Installed ("; then
   shot 62c-pc-installed 4
   texts
-  texts | grep -q "My Emulator" && echo "   ✅ the non-Steam game is in Installed" || echo "   ⚠️ no non-Steam game in Installed"
-  grep -q "^.*art -1234567890" "$PC_LOG" && echo "   ✅ its picture came from the PC" || echo "   ⚠️ its picture wasn't asked for"
+  # The tiles start at the bottom of the screen: bring the first rows up.
+  swipe_up; sleep 1
   tap "Play Apex Legends" && sleep 3
   grep -q "launch 1172470" "$PC_LOG" && echo "   ✅ the PC was asked to start Apex Legends" || echo "   ⚠️ no launch request reached the PC"
+  swipe_up; sleep 1
+  shot 62c2-pc-installed-more 1
+  texts | grep -q "My Emulator" && echo "   ✅ the non-Steam game is in Installed" || echo "   ⚠️ no non-Steam game in Installed"
+  grep -q "^.*art -1234567890" "$PC_LOG" && echo "   ✅ its picture came from the PC" || echo "   ⚠️ its picture wasn't asked for"
+  if tap "Play My Emulator"; then
+    sleep 3
+    grep -q "launch -1234567890" "$PC_LOG" && echo "   ✅ the PC was asked to start the non-Steam game" || echo "   ⚠️ no launch request for the non-Steam game"
+  fi
 fi
 fling_up 4; shot 62d-pc-specs 3
 fling_up 4; shot 62e-pc-specs-more 3
@@ -293,9 +301,12 @@ curl -s "http://127.0.0.1:47800/_finish" > /dev/null
 sleep 12
 after=$(grep -c "GET /steam" "$PC_LOG")
 [ "$after" -gt "$before" ] && echo "   ✅ the library was fetched again ($before -> $after)" || echo "   ⚠️ the library wasn't fetched again ($before -> $after)"
-fling_down 4; sleep 2
-texts | grep -o "Installed ([0-9]*)" | head -1
+texts | grep -o "Installed ([0-9]*)" | head -1 | sed 's/^/   now /'
 shot 62g3-pc-installed-after 1
+# An app installed by adb can sit in the "never used" standby bucket, where Android runs none
+# of its background jobs; a phone it's been opened on has it in "active".
+echo "   standby bucket: $(adb shell am get-standby-bucket $PKG | tr -d '\r')"
+adb shell am set-standby-bucket $PKG active
 adb shell input keyevent KEYCODE_HOME
 sleep 3
 curl -s "http://127.0.0.1:47800/_finish" > /dev/null
@@ -310,7 +321,7 @@ notes | grep -q "running hot" && echo "   ✅ running hot alert" || echo "   ⚠
 adb shell cmd statusbar expand-notifications; sleep 2
 adb exec-out screencap -p > "$OUT/62h-pc-alerts.png" && echo "📸 62h-pc-alerts"
 adb shell cmd statusbar collapse
-adb logcat -d | grep -E "WM-.*PcWatch|PcWatchWorker" | tail -5
+adb logcat -d | grep -E "WM-.*PcWatch|PcWatchWorker|JobScheduler.*vividpulse" | tail -12
 echo "-- the PC goes away: the page keeps what it had, marked offline"
 kill "$PC_PID" 2>/dev/null
 open_page tools; sleep 1
