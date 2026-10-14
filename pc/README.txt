@@ -12,12 +12,16 @@ and start a Steam game from your phone.
    and type the code.
 
 It lives in the icon by the clock (it may be under the ^ arrow). Click the icon for the code and
-settings; right-click it to quit. It starts with Windows (in the background) unless you untick
-"Start with Windows".
+settings; right-click it to quit. Tick "Start with Windows" in its window to have it start (in
+the background) whenever you sign in, so your phone can always reach it.
 
 If the phone can't find the PC: both need the same Wi-Fi, and Windows should see your network as
 Private (Settings > Network & internet > your connection > Network profile type). The window's
-"Allow through firewall" button adds the firewall rule if it's still blocked.
+"Allow through firewall" button opens Windows Firewall's list of allowed apps, where you can tick
+"Private" for VividPulsePC.
+
+If your antivirus quarantines it (some flag new, unsigned programs by guesswork, e.g.
+Malwarebytes "MachineLearning/Anomalous"), restore it and add the folder to its allow list.
 
 It only answers on your local network, only to a phone with the code, and it only reads
 information, apart from starting a Steam game when you ask from the phone. The code is kept in

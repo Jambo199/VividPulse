@@ -1,5 +1,4 @@
 using System;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -63,10 +62,9 @@ namespace VividPulsePC
             server.PhoneConnected += address => OnUi(() =>
                 icon.ShowBalloonTip(4000, "Phone connected", "Vivid Pulse on your phone (" + address + ") can see this PC.", ToolTipIcon.Info));
 
-            // The first time: start with Windows (it can be unticked), and show the code.
+            // The first time: show the code. Starting with Windows waits for the tick box.
             if (config.FirstRun)
             {
-                if (!Startup.Enabled) Startup.Set(true);
                 config.Welcomed();
                 showWindow = true;
             }
@@ -185,7 +183,7 @@ namespace VividPulsePC
 
             var start = new CheckBox
             {
-                Text = "Start with Windows (in the background, by the clock)",
+                Text = "Start with Windows, so your phone can always reach it",
                 Checked = Startup.Enabled,
                 ForeColor = Color.White,
                 Location = new Point(x, y),
@@ -303,21 +301,22 @@ namespace VividPulsePC
         }
     }
 
-    /// <summary>A Windows Firewall rule letting phones on private (home) networks reach this program.</summary>
+    /// <summary>
+    /// Windows Firewall's own "allowed apps" page, where VividPulsePC can be allowed on private
+    /// networks. (It doesn't change firewall settings itself: Windows asks the first time it runs.)
+    /// </summary>
     static class Firewall
     {
         public static void Allow()
         {
-            var exe = Application.ExecutablePath;
-            var rule = "name=\"Vivid Pulse PC\"";
-            var args = "/c netsh advfirewall firewall delete rule " + rule + " & netsh advfirewall firewall add rule " + rule +
-                " dir=in action=allow program=\"" + exe + "\" enable=yes profile=private,domain";
+            MessageBox.Show(
+                "Windows Firewall's list of allowed apps opens next.\n\nClick \"Change settings\", find VividPulsePC (or click \"Allow another app\" and pick it), and tick \"Private\".",
+                "Vivid Pulse PC", MessageBoxButtons.OK, MessageBoxIcon.Information);
             try
             {
-                Process.Start(new ProcessStartInfo("cmd.exe", args) { Verb = "runas", UseShellExecute = true, WindowStyle = ProcessWindowStyle.Hidden });
+                Process.Start(new ProcessStartInfo("control.exe", "/name Microsoft.WindowsFirewall /page pageConfigureApps") { UseShellExecute = true });
             }
-            catch (Win32Exception) { /* Cancelled at the "allow changes?" prompt. */ }
-            catch (Exception e) { Log.Write("Firewall: " + e.Message); }
+            catch (Exception e) { Log.Write("Firewall page: " + e.Message); }
         }
     }
 }
