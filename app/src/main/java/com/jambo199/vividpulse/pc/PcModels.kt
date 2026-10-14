@@ -86,7 +86,10 @@ data class PcSteam(
         get() = collections.firstOrNull { !it.dynamic && it.appIds.isNotEmpty() && it.name.contains("purchas", ignoreCase = true) }
 }
 
-/** A Steam download or update on the PC. [state] is "downloading", "installing", "paused" or "queued". */
+/**
+ * A Steam download or update on the PC. [state] is "downloading", "installing", "paused" or
+ * "queued". Only used for the alerts (the phone no longer shows downloads).
+ */
 data class PcDownload(
     val appId: Int,
     val name: String?,
@@ -96,19 +99,7 @@ data class PcDownload(
     val stagedDone: Long,
     val stagedTotal: Long,
     val bytesPerSec: Long,
-) {
-    /** How far along (0..1), when Steam says. */
-    val fraction: Float?
-        get() = when {
-            state == "installing" && stagedTotal > 0 -> stagedDone.toFloat() / stagedTotal
-            bytesTotal > 0 -> bytesDone.toFloat() / bytesTotal
-            else -> null
-        }?.coerceIn(0f, 1f)
-
-    /** Seconds left at the current speed. */
-    val secondsLeft: Long?
-        get() = if (state == "downloading" && bytesPerSec > 0 && bytesTotal > bytesDone) (bytesTotal - bytesDone) / bytesPerSec else null
-}
+)
 
 /** A download that finished (on the PC's clock). */
 data class PcFinished(val appId: Int, val name: String?, val at: Long)
@@ -119,10 +110,7 @@ data class PcDownloads(
     val finished: List<PcFinished>,
     /** The library's stamp now: when it isn't [PcSteam.stamp], the library has changed. */
     val libraryStamp: String? = null,
-) {
-    /** Steam is busy with one: worth looking more often. */
-    val active: Boolean get() = downloads.any { it.state == "downloading" || it.state == "installing" }
-}
+)
 
 /** Reads what Vivid Pulse PC sends. PowerShell writes numbers as floats and lists of one as lists. */
 object PcParse {

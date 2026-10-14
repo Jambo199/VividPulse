@@ -88,8 +88,6 @@ import coil.request.ImageRequest
 import com.jambo199.vividpulse.Graph
 import com.jambo199.vividpulse.games.Steam
 import com.jambo199.vividpulse.pc.LibraryEntry
-import com.jambo199.vividpulse.pc.PcDownload
-import com.jambo199.vividpulse.pc.PcDownloads
 import com.jambo199.vividpulse.pc.PcClient
 import com.jambo199.vividpulse.pc.PcLibrary
 import com.jambo199.vividpulse.pc.PcFound
@@ -211,7 +209,6 @@ private fun LazyListScope.pcPage(
 ) {
     item { StatusCard(p, state, onNewCode, Modifier.entrance(1)) }
     state.live?.let { live -> item { LiveCard(live, state, Modifier.entrance(2)) } }
-    state.downloads?.takeIf { it.downloads.isNotEmpty() }?.let { d -> item(key = "downloads") { DownloadsCard(d, state, open) } }
     libraryItems(state, vm, p, open, shelf, onShelf)
     state.specs?.let { specs ->
         item { SectionHeader("Inside your PC", subtitle = listOfNotNull(specs.name, model(specs)).joinToString(" · ")) }
@@ -520,59 +517,7 @@ private fun LoadRing(label: String, value: Float, accent: Accent) {
     }
 }
 
-// ---------------------------------------------------------------- Steam downloads and alerts
-
-@Composable
-private fun DownloadsCard(d: PcDownloads, state: PcState, open: (String) -> Unit) {
-    val fresh = state.link == Link.ONLINE
-    val context = LocalContext.current
-    GlassCard(Modifier.fillMaxWidth(), accent = Accents.download) {
-        CardTitle(Icons.Rounded.Download, "Steam downloads", Accents.download, trailing = if (fresh) "live" else "as last seen")
-        Column(Modifier.alpha(if (fresh) 1f else 0.6f)) {
-            d.downloads.forEach { item ->
-                Row(
-                    Modifier.padding(top = 14.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).bouncyClick { open(Routes.game(item.appId)) },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(context).data(Steam.headerFallback(item.appId)).crossfade(200).build(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.width(86.dp).aspectRatio(460f / 215f).clip(RoundedCornerShape(10.dp)).background(LocalPulseColors.current.track),
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(item.name ?: "App ${item.appId}", style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            downloadLine(item),
-                            style = MaterialTheme.typography.bodySmall.merge(Numbers),
-                            color = if (item.state == "downloading") Accents.download.start else MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                        )
-                    }
-                }
-                item.fraction?.let { BarMeter(it, Accents.download, Modifier.fillMaxWidth().padding(top = 8.dp).height(6.dp)) }
-            }
-        }
-    }
-}
-
-/** "Downloading · 25% · 9 of 36 GB · 12.4 MB/s · about 35 min left". */
-private fun downloadLine(d: PcDownload): String {
-    val pct = d.fraction?.let { "${(it * 100).roundToInt()}%" }
-    return when (d.state) {
-        "downloading" -> listOfNotNull(
-            "Downloading",
-            pct,
-            if (d.bytesTotal > 0) "${Format.bytes(d.bytesDone)} of ${Format.bytes(d.bytesTotal)}" else null,
-            d.bytesPerSec.takeIf { it > 0 }?.let { Format.rate(it) },
-            d.secondsLeft?.let { "about ${Format.minutes(((it + 59) / 60).toInt().coerceAtLeast(1))} left" },
-        ).joinToString(" · ")
-        "installing" -> listOfNotNull("Installing", pct).joinToString(" · ")
-        "paused" -> listOfNotNull("Paused", pct).joinToString(" · ")
-        else -> listOfNotNull("Queued", d.bytesTotal.takeIf { it > 0 }?.let { Format.bytes(it) + " to download" }).joinToString(" · ")
-    }
-}
+// ---------------------------------------------------------------- alerts
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

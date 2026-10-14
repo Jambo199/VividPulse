@@ -118,9 +118,9 @@ class PcViewModel : ViewModel() {
             val live = result.getOrNull()
             if (live != null) {
                 val wasOnline = _state.value.link == Link.ONLINE
-                // Steam's downloads every few seconds, and every time while one is going; the first
-                // version of the PC program has none.
-                if (ticks++ % 3 == 0 || _state.value.downloads?.active == true) {
+                // Steam's downloads every few seconds (for the alerts, and to see when the library
+                // changes); the first version of the PC program has none.
+                if (ticks++ % 3 == 0) {
                     runCatching { repo.downloads() }.onSuccess { d ->
                         _state.update { it.copy(downloads = d) }
                         // Something's going on: the background watcher takes over when the page closes.

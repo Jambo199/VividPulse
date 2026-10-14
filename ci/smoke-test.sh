@@ -288,13 +288,11 @@ fi
 fling_up 4; shot 62d-pc-specs 3
 fling_up 4; shot 62e-pc-specs-more 3
 fling_up 6; shot 62f-pc-alerts-card 2
-echo "-- Steam downloads, and PC alerts while the app is in the background"
+echo "-- PC alerts, and the library refreshing by itself"
 open_page tools; sleep 1
 open_page pc; sleep 8
-swipe_up; shot 62g-pc-downloads 2
+swipe_up; shot 62g-pc-library 2
 texts
-sleep 5
-shot 62g2-pc-downloads-moving 1
 echo "-- a download finishes while the page is open: Installed is fetched again by itself"
 before=$(grep -c "GET /steam" "$PC_LOG")
 curl -s "http://127.0.0.1:47800/_finish" > /dev/null

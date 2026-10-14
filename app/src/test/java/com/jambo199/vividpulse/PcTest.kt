@@ -124,15 +124,10 @@ class PcTest {
     fun readsDownloads() {
         val d = PcParse.downloads(sample("downloads.json"))
         assertEquals(listOf(1808500, 730), d.downloads.map { it.appId })
-        val arc = d.downloads[0]
-        assertEquals("downloading", arc.state)
-        assertEquals(0.25f, arc.fraction!!, 0.001f)
-        // 27 GB to go at 31.5 MB/s: about 14 minutes.
-        assertEquals(857L, arc.secondsLeft)
+        assertEquals("downloading", d.downloads[0].state)
+        assertEquals(9_000_000_000L, d.downloads[0].bytesDone)
         assertEquals("queued", d.downloads[1].state)
-        assertNull(d.downloads[1].secondsLeft)
         assertTrue(d.finished.isEmpty())
-        assertTrue(d.active)
         assertEquals("5f1c2a7b9e3d4c60", d.libraryStamp)
         // From the first PC program: no stamp, so the library isn't fetched again over it.
         assertNull(PcParse.downloads("""{"at": 1, "downloads": [], "finished": []}""").libraryStamp)
