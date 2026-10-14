@@ -38,7 +38,11 @@ object PcClient {
     private const val DISCOVER = "VIVIDPULSE_DISCOVER"
 
     /** GET [path] (or POST when [post]); the body when the PC answers 200. */
-    fun request(host: String, port: Int, path: String, code: String?, post: Boolean = false, timeoutMs: Int = 5_000): String {
+    fun request(host: String, port: Int, path: String, code: String?, post: Boolean = false, timeoutMs: Int = 5_000): String =
+        String(requestBytes(host, port, path, code, post, timeoutMs), Charsets.UTF_8)
+
+    /** Like [request], for a picture. */
+    fun requestBytes(host: String, port: Int, path: String, code: String?, post: Boolean = false, timeoutMs: Int = 5_000): ByteArray {
         Socket().use { socket ->
             socket.connect(InetSocketAddress(host, port), timeoutMs)
             socket.soTimeout = timeoutMs
@@ -59,7 +63,7 @@ object PcClient {
             val split = indexOf(bytes, "\r\n\r\n".toByteArray())
             if (split < 0) throw IOException("The PC sent something unexpected")
             val status = String(bytes, 0, split, Charsets.US_ASCII).lineSequence().first().split(" ").getOrNull(1)?.toIntOrNull()
-            val body = String(bytes, split + 4, bytes.size - split - 4, Charsets.UTF_8)
+            val body = bytes.copyOfRange(split + 4, bytes.size)
             return when (status) {
                 200 -> body
                 401 -> throw WrongCodeException()

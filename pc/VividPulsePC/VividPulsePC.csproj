@@ -9,6 +9,7 @@
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- 2.N: N is how many times the PC program has changed (CI passes it; a build at home is 2.0). -->
     <Version>2.0.0</Version>
     <Product>Vivid Pulse PC</Product>
     <AssemblyTitle>Vivid Pulse PC</AssemblyTitle>
@@ -22,6 +23,7 @@
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Management" />
+    <Reference Include="System.IO.Compression" />
     <EmbeddedResource Include="icon.ico" LogicalName="icon.ico" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>

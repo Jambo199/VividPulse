@@ -1,4 +1,4 @@
 {"at": 1760360000000, "downloads": [
  {"appId": 1808500, "name": "ARC Raiders", "state": "downloading", "bytesDone": 9000000000, "bytesTotal": 36000000000, "stagedDone": 0, "stagedTotal": 0, "bytesPerSec": 31500000, "sizeOnDisk": 0},
  {"appId": 730, "name": "Counter-Strike 2", "state": "queued", "bytesDone": 0, "bytesTotal": 1200000000, "stagedDone": 0, "stagedTotal": 0, "bytesPerSec": 0, "sizeOnDisk": 38000000000}
-], "finished": []}
+], "finished": [], "libraryStamp": "5f1c2a7b9e3d4c60"}

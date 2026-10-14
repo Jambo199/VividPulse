@@ -20,6 +20,8 @@ namespace VividPulsePC
         public long BytesDownloaded;
         public long BytesToStage;
         public long BytesStaged;
+        /// <summary>When Steam last wrote the file (UTC).</summary>
+        public DateTime WrittenAt;
     }
 
     /// <summary>
@@ -31,8 +33,8 @@ namespace VividPulsePC
         public const long FirstSteamId = 76561197960265728;
 
         // AppState StateFlags bits (Steam's EAppState).
-        const long UpdateRequired = 2, UpdateRunning = 256, UpdatePaused = 512, UpdateStarted = 1024;
-        const long AddingFiles = 262144, Preallocating = 524288, Downloading = 1048576, Staging = 2097152, Committing = 4194304;
+        public const long UpdateRequired = 2, FullyInstalled = 4, UpdateRunning = 256, UpdatePaused = 512, UpdateStarted = 1024;
+        public const long Validating = 131072, AddingFiles = 262144, Preallocating = 524288, Downloading = 1048576, Staging = 2097152, Committing = 4194304;
 
         readonly string root;
 
@@ -183,11 +185,13 @@ namespace VividPulsePC
                         Library = lib,
                         SizeOnDisk = s.Number("SizeOnDisk"),
                         LastUpdated = s.Number("LastUpdated"),
-                        StateFlags = s.Number("StateFlags"),
+                        // Steam always writes it; a file without it is taken as installed.
+                        StateFlags = s.Text("StateFlags") != null ? s.Number("StateFlags") : FullyInstalled,
                         BytesToDownload = s.Number("BytesToDownload"),
                         BytesDownloaded = s.Number("BytesDownloaded"),
                         BytesToStage = s.Number("BytesToStage"),
                         BytesStaged = s.Number("BytesStaged"),
+                        WrittenAt = File.GetLastWriteTimeUtc(file),
                     });
                 }
             }
@@ -198,18 +202,114 @@ namespace VividPulsePC
         public static bool IsTool(string name) =>
             name != null && Regex.IsMatch(name, @"^(Steamworks Common Redistributables|Steam Linux Runtime|Proton|SteamVR)");
 
+        /// <summary>
+        /// Games added to Steam that aren't from Steam ("Add a Non-Steam Game"), from the account's
+        /// shortcuts.vdf. Hidden ones are left out, as Steam's library leaves them out.
+        /// </summary>
+        public List<JObject> Shortcuts(long accountId)
+        {
+            var result = new List<JObject>();
+            var file = ShortcutsFile(accountId);
+            if (!File.Exists(file)) return result;
+            Dictionary<string, object> list;
+            try { list = Vdf.ParseBinary(File.ReadAllBytes(file)).Block("shortcuts"); }
+            catch (Exception e) when (e is FormatException || e is IOException || e is ArgumentException) { return result; }
+            if (list == null) return result;
+            foreach (var v in list.Values)
+            {
+                if (!(v is Dictionary<string, object> s)) continue;
+                string name = s.Text("AppName"), exe = s.Text("Exe");
+                if (string.IsNullOrWhiteSpace(name) || s.Number("IsHidden") != 0) continue;
+                uint id = int.TryParse(s.Text("appid"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int signed) && signed != 0
+                    ? unchecked((uint)signed)
+                    : ShortcutId(exe, name);
+                result.Add(new JObject
+                {
+                    { "appId", unchecked((int)id) },
+                    { "name", name.Trim() },
+                    { "lastPlayed", s.Number("LastPlayTime") },
+                });
+            }
+            return result;
+        }
+
+        string ShortcutsFile(long accountId) =>
+            Path.Combine(root, "userdata", accountId.ToString(CultureInfo.InvariantCulture), "config", "shortcuts.vdf");
+
+        /// <summary>The ID Steam gave non-Steam games before it saved one: a CRC of the program and name, top bit set.</summary>
+        public static uint ShortcutId(string exe, string name)
+        {
+            uint crc = 0xFFFFFFFF;
+            foreach (byte b in System.Text.Encoding.UTF8.GetBytes((exe ?? "") + name))
+            {
+                crc ^= b;
+                for (int k = 0; k < 8; k++) crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320 : crc >> 1;
+            }
+            return ~crc | 0x80000000;
+        }
+
+        /// <summary>The picture you gave a non-Steam game in Steam (its tall cover), or null.</summary>
+        public string ShortcutArt(long accountId, uint id)
+        {
+            var grid = Path.Combine(root, "userdata", accountId.ToString(CultureInfo.InvariantCulture), "config", "grid");
+            foreach (var suffix in new[] { "p", "" })
+            {
+                foreach (var ext in new[] { ".png", ".jpg", ".jpeg", ".webp" })
+                {
+                    var file = Path.Combine(grid, id.ToString(CultureInfo.InvariantCulture) + suffix + ext);
+                    if (File.Exists(file)) return file;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Changes whenever what the library shows would: a game installed, finished or removed,
+        /// collections edited, non-Steam games added, someone else signing in. Cheap to work out.
+        /// </summary>
+        public string Stamp(List<Manifest> manifests)
+        {
+            ulong hash = 14695981039346656037;
+            void Add(string text)
+            {
+                foreach (char c in text)
+                {
+                    hash ^= c;
+                    hash *= 1099511628211;
+                }
+            }
+            foreach (var m in manifests.OrderBy(x => x.AppId)) Add(m.AppId + ((m.StateFlags & FullyInstalled) != 0 ? "i;" : "d;"));
+            Add(Changed(Path.Combine(root, "config", "loginusers.vdf")));
+            var userdata = Path.Combine(root, "userdata");
+            if (Directory.Exists(userdata))
+            {
+                foreach (var account in Directory.EnumerateDirectories(userdata).OrderBy(x => x))
+                {
+                    Add(Changed(Path.Combine(account, "config", "cloudstorage", "cloud-storage-namespace-1.json")));
+                    Add(Changed(Path.Combine(account, "config", "shortcuts.vdf")));
+                }
+            }
+            return hash.ToString("x16", CultureInfo.InvariantCulture);
+        }
+
+        static string Changed(string file) => File.Exists(file) ? File.GetLastWriteTimeUtc(file).Ticks.ToString(CultureInfo.InvariantCulture) + ";" : "-;";
+
         /// <summary>The whole library, as the phone's PC tab shows it.</summary>
-        public JObject Library()
+        public JObject Library() => Library(Manifests());
+
+        public JObject Library(List<Manifest> manifests)
         {
             var user = User();
             long account = user != null ? AccountId(user.Get("steamId") as string) : 0;
             var played = account > 0 ? Played(account) : new Dictionary<int, long[]>();
             var games = new Dictionary<int, JObject>();
-            foreach (var m in Manifests())
+            var tools = new List<string>();
+            foreach (var m in manifests)
             {
-                if (IsTool(m.Name)) continue;
+                if (IsTool(m.Name)) { tools.Add(m.Name); continue; }
                 played.TryGetValue(m.AppId, out var p);
-                games[m.AppId] = Game(m.AppId, m.Name, true, m.SizeOnDisk, m.LastUpdated, m.Library, p);
+                // A game still on its first download isn't installed yet (an update doesn't count).
+                games[m.AppId] = Game(m.AppId, m.Name, (m.StateFlags & FullyInstalled) != 0, m.SizeOnDisk, m.LastUpdated, m.Library, p);
             }
             foreach (var kv in played)
             {
@@ -221,8 +321,11 @@ namespace VividPulsePC
                 { "user", user },
                 { "libraries", Libraries() },
                 { "games", games.Values.ToList() },
+                { "shortcuts", account > 0 ? Shortcuts(account) : new List<JObject>() },
                 { "collections", account > 0 ? Collections(account) : new List<JObject>() },
                 { "libraryAppIds", LibraryAppIds() },
+                { "leftOut", tools },
+                { "stamp", Stamp(manifests) },
             };
         }
 
@@ -239,17 +342,24 @@ namespace VividPulsePC
         };
 
         /// <summary>Fully installed and up to date.</summary>
-        public static bool IsInstalled(Manifest m) => (m.StateFlags & 4) != 0 && DownloadState(m) == null;
+        public static bool IsInstalled(Manifest m) => (m.StateFlags & FullyInstalled) != 0 && DownloadState(m) == null;
 
         /// <summary>What a manifest says about a download: null when the game is up to date.</summary>
         public static string DownloadState(Manifest m)
         {
-            bool pending = (m.StateFlags & (UpdateRequired | UpdateStarted)) != 0
-                || (m.BytesToDownload > 0 && m.BytesDownloaded < m.BytesToDownload);
-            if (!pending) return null;
-            if ((m.StateFlags & UpdatePaused) != 0) return "paused";
-            if ((m.StateFlags & (Staging | Committing | AddingFiles | Preallocating)) != 0) return "installing";
-            if ((m.StateFlags & (UpdateRunning | Downloading)) != 0) return "downloading";
+            bool pending = (m.StateFlags & (UpdateRequired | UpdateStarted | UpdateRunning | UpdatePaused)) != 0
+                || ((m.StateFlags & FullyInstalled) == 0 && m.BytesToDownload > 0 && m.BytesDownloaded < m.BytesToDownload);
+            return pending ? State(m.StateFlags) : null;
+        }
+
+        /// <summary>A download's state from Steam's flags: downloading, installing, paused or queued.</summary>
+        public static string State(long flags)
+        {
+            if ((flags & UpdatePaused) != 0) return "paused";
+            // Steam unpacks while it downloads, so Downloading wins over Staging.
+            if ((flags & Downloading) != 0) return "downloading";
+            if ((flags & (Staging | Committing | AddingFiles | Preallocating | Validating)) != 0) return "installing";
+            if ((flags & UpdateRunning) != 0) return "downloading";
             return "queued";
         }
     }

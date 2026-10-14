@@ -2,17 +2,21 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using Microsoft.Win32;
 
 namespace VividPulsePC
 {
-    /// <summary>The Steam install on this PC: its library (kept for a few minutes), downloads, and starting games.</summary>
+    /// <summary>The Steam install on this PC: its library, downloads, and starting games.</summary>
     static class Steam
     {
         static readonly object Gate = new object();
         static JObject library;
         static DateTime libraryAt;
         static readonly DownloadTracker Tracker = new DownloadTracker();
+
+        /// <summary>The PC's network readings, for following downloads live (set when they start).</summary>
+        public static INetwork Network;
 
         public static string FindRoot()
         {
@@ -42,121 +46,93 @@ namespace VividPulsePC
             catch (Exception) { return 0; }
         }
 
+        /// <summary>
+        /// The library, kept until something in it changes (a game installed or removed, collections
+        /// edited) or for half an hour; <paramref name="refresh"/> reads it again anyway.
+        /// </summary>
         public static JObject Library(bool refresh)
         {
             lock (Gate)
             {
-                if (library != null && !refresh && DateTime.UtcNow - libraryAt < TimeSpan.FromMinutes(5)) return library;
                 var root = FindRoot();
-                library = root == null
-                    ? new JObject { { "installed", false }, { "games", new List<object>() }, { "collections", new List<object>() }, { "libraryAppIds", new List<object>() } }
-                    : new SteamReader(root).Library();
+                if (root == null)
+                {
+                    library = null;
+                    return new JObject { { "installed", false }, { "games", new List<object>() }, { "collections", new List<object>() }, { "libraryAppIds", new List<object>() } };
+                }
+                var reader = new SteamReader(root);
+                var manifests = reader.Manifests();
+                var stamp = reader.Stamp(manifests);
+                if (library != null && !refresh && stamp == library.Get("stamp") as string && DateTime.UtcNow - libraryAt < TimeSpan.FromMinutes(30)) return library;
+                bool changed = library == null || stamp != library.Get("stamp") as string;
+                library = reader.Library(manifests);
                 libraryAt = DateTime.UtcNow;
+                if (changed) Describe(library);
                 return library;
             }
+        }
+
+        /// <summary>What the library holds, in the log (for when a count looks wrong).</summary>
+        static void Describe(JObject lib)
+        {
+            var games = (List<JObject>)lib.Get("games");
+            var shortcuts = (List<JObject>)lib.Get("shortcuts");
+            var leftOut = (List<string>)lib.Get("leftOut");
+            int installed = games.Count(g => (bool)g.Get("installed"));
+            var downloading = games.Where(g => !(bool)g.Get("installed") && (long)g.Get("sizeBytes") > 0).Select(g => g.Get("name") as string).ToList();
+            Log.Write("Steam library: " + installed + " games installed"
+                + (downloading.Count > 0 ? ", " + downloading.Count + " on their first download (" + string.Join(", ", downloading) + ")" : "")
+                + ", " + shortcuts.Count + " non-Steam games" + (shortcuts.Count > 0 ? " (" + string.Join(", ", shortcuts.Select(x => x.Get("name"))) + ")" : "")
+                + (leftOut.Count > 0 ? "; Steam's own tools left out: " + string.Join(", ", leftOut) : ""));
         }
 
         public static JObject Downloads()
         {
             var root = FindRoot();
-            var list = root == null ? new List<JObject>() : Tracker.Read(new SteamReader(root));
-            return new JObject { { "at", Clock.Now() }, { "downloads", list }, { "finished", Tracker.Finished() } };
+            if (root == null) return new JObject { { "at", Clock.Now() }, { "downloads", new List<JObject>() }, { "finished", Tracker.Finished() } };
+            var reader = new SteamReader(root);
+            var manifests = reader.Manifests();
+            var list = Tracker.Read(manifests, ContentLog.Read(root), Updating, Network);
+            return new JObject
+            {
+                { "at", Clock.Now() },
+                { "downloads", list },
+                { "finished", Tracker.Finished() },
+                // Changes when the library does, so the phone knows to fetch it again.
+                { "libraryStamp", reader.Stamp(manifests) },
+            };
+        }
+
+        /// <summary>Whether Steam marks a game as being updated right now (HKCU\Software\Valve\Steam\Apps\id, "Updating").</summary>
+        static bool? Updating(int appId)
+        {
+            try
+            {
+                using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam\Apps\" + appId))
+                {
+                    return key?.GetValue("Updating") is int v ? v != 0 : (bool?)null;
+                }
+            }
+            catch (Exception) { return null; }
         }
 
         public static void Launch(int appId) =>
             Process.Start(new ProcessStartInfo("steam://rungameid/" + appId) { UseShellExecute = true });
-    }
 
-    /// <summary>Steam's downloads, with how fast each is going (worked out from one look to the next).</summary>
-    sealed class DownloadTracker
-    {
-        sealed class Seen
+        /// <summary>Starts a non-Steam game through Steam (its game ID is the shortcut's ID, then 0x02000000).</summary>
+        public static void LaunchShortcut(int id) =>
+            Process.Start(new ProcessStartInfo("steam://rungameid/" + (((ulong)unchecked((uint)id) << 32) | 0x02000000UL)) { UseShellExecute = true });
+
+        /// <summary>The picture you gave a non-Steam game in Steam, or null.</summary>
+        public static string ShortcutArt(int id)
         {
-            public long Bytes;
-            public DateTime At;
-            public double Rate;
-            public DateTime MovedAt;
+            var root = FindRoot();
+            if (root == null) return null;
+            var reader = new SteamReader(root);
+            var user = reader.User();
+            long account = user != null ? SteamReader.AccountId(user.Get("steamId") as string) : 0;
+            return account > 0 ? reader.ShortcutArt(account, unchecked((uint)id)) : null;
         }
-
-        readonly Dictionary<int, Seen> seen = new Dictionary<int, Seen>();
-        readonly List<JObject> finished = new List<JObject>();
-
-        /// <summary>Downloads that finished in the last day (the phone tells you about each once).</summary>
-        public List<JObject> Finished()
-        {
-            lock (seen)
-            {
-                long dayAgo = Clock.Now() - 24L * 3600 * 1000;
-                finished.RemoveAll(f => (long)f.Get("at") < dayAgo);
-                return new List<JObject>(finished);
-            }
-        }
-
-        public List<JObject> Read(SteamReader reader)
-        {
-            var now = DateTime.UtcNow;
-            var result = new List<JObject>();
-            lock (seen)
-            {
-                var current = new HashSet<int>();
-                var manifests = reader.Manifests();
-                foreach (var m in manifests)
-                {
-                    var state = SteamReader.DownloadState(m);
-                    if (state == null || SteamReader.IsTool(m.Name)) continue;
-                    current.Add(m.AppId);
-                    long done = m.BytesDownloaded + m.BytesStaged;
-                    if (!seen.TryGetValue(m.AppId, out var s))
-                    {
-                        s = new Seen { Bytes = done, At = now, MovedAt = DateTime.MinValue };
-                        seen[m.AppId] = s;
-                    }
-                    else if (done > s.Bytes && (now - s.At).TotalSeconds > 0.5)
-                    {
-                        double rate = (done - s.Bytes) / (now - s.At).TotalSeconds;
-                        s.Rate = s.Rate <= 0 ? rate : s.Rate * 0.5 + rate * 0.5;
-                        s.Bytes = done;
-                        s.At = now;
-                        s.MovedAt = now;
-                    }
-                    else if ((now - s.MovedAt).TotalSeconds > 30)
-                    {
-                        s.Rate = 0;
-                    }
-                    // Steam only marks the one it's working on; any game whose bytes are moving is downloading.
-                    if (state == "queued" && (now - s.MovedAt).TotalSeconds < 30) state = "downloading";
-                    result.Add(new JObject
-                    {
-                        { "appId", m.AppId },
-                        { "name", m.Name },
-                        { "state", state },
-                        { "bytesDone", m.BytesDownloaded },
-                        { "bytesTotal", m.BytesToDownload },
-                        { "stagedDone", m.BytesStaged },
-                        { "stagedTotal", m.BytesToStage },
-                        { "bytesPerSec", (long)s.Rate },
-                        { "sizeOnDisk", m.SizeOnDisk },
-                    });
-                }
-                foreach (var gone in new List<int>(seen.Keys))
-                {
-                    if (current.Contains(gone)) continue;
-                    seen.Remove(gone);
-                    // Left the list and installed (not cancelled or uninstalled): finished.
-                    var m = manifests.Find(x => x.AppId == gone);
-                    if (m != null && SteamReader.IsInstalled(m))
-                    {
-                        finished.RemoveAll(f => (int)f.Get("appId") == gone);
-                        finished.Add(new JObject { { "appId", gone }, { "name", m.Name }, { "at", Clock.Now() } });
-                    }
-                }
-            }
-            // Downloading first, then installing, paused and queued.
-            result.Sort((a, b) => Order(a.Get("state") as string).CompareTo(Order(b.Get("state") as string)));
-            return result;
-        }
-
-        static int Order(string state) => state == "downloading" ? 0 : state == "installing" ? 1 : state == "paused" ? 2 : 3;
     }
 
     static class Clock

@@ -62,6 +62,9 @@ data class PcLive(
 /** A game in the PC's Steam library. */
 data class PcGame(val appId: Int, val name: String?, val installed: Boolean, val sizeBytes: Long, val minutes: Long, val lastPlayed: Long)
 
+/** A game added to Steam that isn't from Steam ("Add a Non-Steam Game"). [appId] is Steam's ID for it, below 0. */
+data class PcShortcut(val appId: Int, val name: String, val lastPlayed: Long)
+
 /** One of your Steam collections. A dynamic one (built from filters) has no list of games. */
 data class PcCollection(val id: String?, val name: String, val appIds: List<Int>, val dynamic: Boolean)
 
@@ -72,6 +75,9 @@ data class PcSteam(
     val collections: List<PcCollection>,
     /** Every app in the Steam library on this PC. */
     val libraryAppIds: List<Int>,
+    val shortcuts: List<PcShortcut> = emptyList(),
+    /** Changes whenever the library does (the downloads say which it is now); null from older PC programs. */
+    val stamp: String? = null,
 ) {
     val installedGames: List<PcGame> get() = games.filter { it.installed }
 
@@ -107,7 +113,16 @@ data class PcDownload(
 /** A download that finished (on the PC's clock). */
 data class PcFinished(val appId: Int, val name: String?, val at: Long)
 
-data class PcDownloads(val at: Long, val downloads: List<PcDownload>, val finished: List<PcFinished>)
+data class PcDownloads(
+    val at: Long,
+    val downloads: List<PcDownload>,
+    val finished: List<PcFinished>,
+    /** The library's stamp now: when it isn't [PcSteam.stamp], the library has changed. */
+    val libraryStamp: String? = null,
+) {
+    /** Steam is busy with one: worth looking more often. */
+    val active: Boolean get() = downloads.any { it.state == "downloading" || it.state == "installing" }
+}
 
 /** Reads what Vivid Pulse PC sends. PowerShell writes numbers as floats and lists of one as lists. */
 object PcParse {
@@ -180,6 +195,11 @@ object PcParse {
                 PcCollection(c.str("id"), name, c.ints("appIds"), c.optBoolean("dynamic"))
             },
             libraryAppIds = o.ints("libraryAppIds"),
+            shortcuts = o.objects("shortcuts").mapNotNull { s ->
+                val id = s.int("appId") ?: return@mapNotNull null
+                PcShortcut(id, s.str("name") ?: return@mapNotNull null, s.long("lastPlayed") ?: 0)
+            },
+            stamp = o.str("stamp"),
         )
     }
 
@@ -204,6 +224,7 @@ object PcParse {
                 val id = f.int("appId") ?: return@mapNotNull null
                 PcFinished(id, f.str("name"), f.long("at") ?: 0)
             },
+            libraryStamp = o.str("libraryStamp"),
         )
     }
 

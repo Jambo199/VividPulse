@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.jambo199.vividpulse.Graph
 import com.jambo199.vividpulse.alerts.PcAlertMath
 import com.jambo199.vividpulse.alerts.PcWatch
+import com.jambo199.vividpulse.pc.LibraryEntry
 import com.jambo199.vividpulse.pc.PcDownloads
 import com.jambo199.vividpulse.pc.PcAddress
 import com.jambo199.vividpulse.pc.PcFound
@@ -116,15 +117,20 @@ class PcViewModel : ViewModel() {
             val result = runCatching { repo.live() }
             val live = result.getOrNull()
             if (live != null) {
-                // Steam's downloads every few seconds; the first version of the PC program has none.
-                if (ticks++ % 3 == 0) {
+                val wasOnline = _state.value.link == Link.ONLINE
+                // Steam's downloads every few seconds, and every time while one is going; the first
+                // version of the PC program has none.
+                if (ticks++ % 3 == 0 || _state.value.downloads?.active == true) {
                     runCatching { repo.downloads() }.onSuccess { d ->
                         _state.update { it.copy(downloads = d) }
                         // Something's going on: the background watcher takes over when the page closes.
                         if (PcAlertMath.busy(d, live) && (repo.alertDownloads || repo.alertHeat)) PcWatch.start(Graph.app)
+                        // A game installed, finished or removed on the PC: the library has changed.
+                        // (Just connected, everything is fetched again below anyway.)
+                        val shown = _state.value.steam?.stamp
+                        if (wasOnline && d.libraryStamp != null && shown != null && d.libraryStamp != shown) refreshAll(specs = false)
                     }
                 }
-                val wasOnline = _state.value.link == Link.ONLINE
                 misses = 0
                 _state.update { s ->
                     s.copy(
@@ -156,11 +162,11 @@ class PcViewModel : ViewModel() {
         }
     }
 
-    /** Specs and the Steam library, fresh from the PC. */
-    fun refreshAll(steamRefresh: Boolean = false) {
+    /** Specs (unless not [specs]) and the Steam library, fresh from the PC. */
+    fun refreshAll(steamRefresh: Boolean = false, specs: Boolean = true) {
         if (refreshing?.isActive == true) return
         refreshing = viewModelScope.launch {
-            runCatching { repo.specs() }.onSuccess { s -> _state.update { it.copy(specs = s) } }
+            if (specs) runCatching { repo.specs() }.onSuccess { s -> _state.update { it.copy(specs = s) } }
             _state.update { it.copy(libraryLoading = true) }
             runCatching { repo.steam(steamRefresh) }.onSuccess { steam ->
                 _state.update { it.copy(steam = steam) }
@@ -212,10 +218,10 @@ class PcViewModel : ViewModel() {
 
     fun clearError() = _setup.update { it.copy(error = null) }
 
-    /** Starts a Steam game on the PC; [done] gets an error message, or null when it started. */
-    fun play(appId: Int, done: (String?) -> Unit) {
+    /** Starts a game on the PC; [done] gets an error message, or null when it started. */
+    fun play(game: LibraryEntry, done: (String?) -> Unit) {
         viewModelScope.launch {
-            val e = runCatching { repo.launch(appId) }.exceptionOrNull()
+            val e = runCatching { repo.launch(game) }.exceptionOrNull()
             if (e is CancellationException) throw e
             done(
                 when {

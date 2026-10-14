@@ -733,10 +733,11 @@ private fun TileRow(row: List<LibraryEntry>, online: Boolean, vm: PcViewModel, p
             GameTile(
                 g,
                 canPlay = online && g.installed,
-                onOpen = { open(Routes.game(g.appId)) },
+                // A non-Steam game has no store page.
+                onOpen = { if (!g.shortcut) open(Routes.game(g.appId)) },
                 onPlay = {
                     Toast.makeText(context, "Starting ${g.name} on ${p.name}…", Toast.LENGTH_SHORT).show()
-                    vm.play(g.appId) { error -> if (error != null) Toast.makeText(context, error, Toast.LENGTH_SHORT).show() }
+                    vm.play(g) { error -> if (error != null) Toast.makeText(context, error, Toast.LENGTH_SHORT).show() }
                 },
                 modifier = Modifier.weight(1f),
             )
@@ -784,6 +785,7 @@ private fun GameTile(g: LibraryEntry, canPlay: Boolean, onOpen: () -> Unit, onPl
         }
         Text(g.name, style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
         val note = when {
+            g.shortcut -> "Non-Steam game"
             g.installed && g.sizeBytes > 0 -> Format.bytes(g.sizeBytes)
             g.minutes > 0 -> hours(g.minutes)
             else -> null

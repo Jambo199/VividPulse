@@ -6,6 +6,7 @@ import com.jambo199.vividpulse.pc.LibraryJson
 import com.jambo199.vividpulse.pc.PcAddress
 import com.jambo199.vividpulse.pc.PcFinished
 import com.jambo199.vividpulse.pc.PcLibrary
+import com.jambo199.vividpulse.pc.PcLibraryMath
 import com.jambo199.vividpulse.pc.PcParse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -53,7 +54,10 @@ class PcTest {
         val s = PcParse.steam(sample("steam.json"))
         assertTrue(s.installed)
         assertEquals("Jambo", s.userName)
-        assertEquals(7, s.installedGames.size)
+        // ARC Raiders is on its first download: not installed yet.
+        assertEquals(6, s.installedGames.size)
+        assertEquals(listOf(-1234567890 to "My Emulator"), s.shortcuts.map { it.appId to it.name })
+        assertEquals("5f1c2a7b9e3d4c60", s.stamp)
         assertEquals(6120L, s.games.first { it.appId == 1091500 }.minutes)
         assertEquals(3, s.collections.size)
         // The hand-made "PURCHASED" collection, not the dynamic "Installed" one.
@@ -98,7 +102,7 @@ class PcTest {
     fun keepsTheLibraryForWhenThePcIsOff() {
         val l = PcLibrary(
             purchased = listOf(LibraryEntry(1091500, "Cyberpunk 2077", "https://x/c.jpg", true, 74_000_000_000, 6120)),
-            installed = emptyList(),
+            installed = listOf(LibraryEntry(-1234567890, "My Emulator", "", true, 0, 0, shortcut = true)),
             fromCollection = null,
         )
         assertEquals(l, LibraryJson.read(LibraryJson.write(l)))
@@ -128,6 +132,18 @@ class PcTest {
         assertEquals("queued", d.downloads[1].state)
         assertNull(d.downloads[1].secondsLeft)
         assertTrue(d.finished.isEmpty())
+        assertTrue(d.active)
+        assertEquals("5f1c2a7b9e3d4c60", d.libraryStamp)
+        // From the first PC program: no stamp, so the library isn't fetched again over it.
+        assertNull(PcParse.downloads("""{"at": 1, "downloads": [], "finished": []}""").libraryStamp)
+    }
+
+    @Test
+    fun installedListsWhatSteamDoes() {
+        // Games, demos, mods, software (Wallpaper Engine and the like) and playtests count.
+        listOf(0, 1, 2, 6, 12, null).forEach { assertTrue("kind $it", PcLibraryMath.countsAsInstalled(it)) }
+        // DLC, soundtracks, videos and Steam's tools don't.
+        listOf(3, 4, 7, 11, 13).forEach { assertTrue("kind $it", !PcLibraryMath.countsAsInstalled(it)) }
     }
 
     @Test

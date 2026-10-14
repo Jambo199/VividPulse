@@ -22,6 +22,8 @@ data class LibraryEntry(
     val installed: Boolean,
     val sizeBytes: Long,
     val minutes: Long,
+    /** A non-Steam game added to Steam: no store page, and started its own way. */
+    val shortcut: Boolean = false,
 )
 
 /** Purchased and Installed, the two collections the PC tab shows. */
@@ -57,7 +59,7 @@ class PcRepository(context: Context) {
 
     fun forget() {
         prefs.edit().clear().apply()
-        dir.listFiles()?.forEach { it.delete() }
+        dir.listFiles()?.forEach { it.deleteRecursively() }
         library = null
         _pairing.value = null
     }
@@ -127,8 +129,32 @@ class PcRepository(context: Context) {
         PcParse.steam(json)
     }
 
-    /** Starts a Steam game on the PC. */
-    suspend fun launch(appId: Int) = withContext(Dispatchers.IO) { get("/launch?appid=$appId", post = true) }
+    /** Starts a game on the PC through Steam. */
+    suspend fun launch(game: LibraryEntry) = withContext(Dispatchers.IO) {
+        get(if (game.shortcut) "/launch?shortcut=${game.appId}" else "/launch?appid=${game.appId}", post = true)
+    }
+
+    /**
+     * The picture a non-Steam game has in Steam on the PC, kept on the phone (a day for none), as
+     * a file the image loader can read; "" when it has none.
+     */
+    private fun shortcutArt(id: Int): String {
+        val folder = File(dir, "art").apply { mkdirs() }
+        val file = File(folder, "$id.img")
+        val none = File(folder, "$id.none")
+        if (file.length() > 0) return "file://" + file.absolutePath
+        if (System.currentTimeMillis() - none.lastModified() < DAY_MS) return ""
+        val p = _pairing.value ?: return ""
+        return runCatching {
+            file.writeBytes(PcClient.requestBytes(p.host, p.port, "/art?shortcut=$id", p.code, timeoutMs = 8_000))
+            "file://" + file.absolutePath
+        }.getOrElse {
+            file.delete()
+            none.writeText("")
+            none.setLastModified(System.currentTimeMillis())
+            ""
+        }
+    }
 
     /**
      * Purchased and Installed, with names and covers from the Steam store. Purchased is your own
@@ -140,8 +166,7 @@ class PcRepository(context: Context) {
         val collection = steam.purchasedCollection
         val owned = collection?.appIds ?: (steam.libraryAppIds + steam.games.map { it.appId }).distinct()
         val items = runCatching { Graph.games.storeItems((owned + steam.installedGames.map { it.appId }).distinct()) }.getOrDefault(emptyMap())
-        // Steam's Installed collection is games and software: not soundtracks, DLC or videos.
-        val installed = steam.installedGames.filter { g -> items[g.appId]?.type.let { it == null || it == 0 || it == 1 } }
+        val installed = steam.installedGames.filter { g -> PcLibraryMath.countsAsInstalled(items[g.appId]?.type) }
         val games = steam.games.associateBy { it.appId }
         fun entry(id: Int): LibraryEntry {
             val item = items[id]
@@ -162,7 +187,10 @@ class PcRepository(context: Context) {
         }
         PcLibrary(
             purchased = purchased.sortedBy { it.name.lowercase() },
-            installed = installed.map { entry(it.appId) }.sortedBy { it.name.lowercase() },
+            installed = (
+                installed.map { entry(it.appId) } +
+                    steam.shortcuts.map { LibraryEntry(it.appId, it.name, shortcutArt(it.appId), installed = true, sizeBytes = 0, minutes = 0, shortcut = true) }
+                ).sortedBy { it.name.lowercase() },
             fromCollection = collection?.name,
         ).also {
             library = steam to it
@@ -198,7 +226,20 @@ class PcRepository(context: Context) {
     companion object {
         /** Where the PC program is published, next to the app. */
         fun downloadUrl(): String = com.jambo199.vividpulse.BuildConfig.UPDATE_BASE_URL + "VividPulsePC.zip"
+
+        private const val DAY_MS = 24 * 60 * 60 * 1000L
     }
+}
+
+object PcLibraryMath {
+    /**
+     * Whether an installed app belongs in Installed, by its kind in the Steam store (EStoreAppType):
+     * games, demos, mods, software and playtests do, as in Steam's library; DLC, soundtracks,
+     * videos and Steam's tools don't. One the store doesn't know (delisted) counts.
+     */
+    fun countsAsInstalled(type: Int?): Boolean = type == null || type in INSTALLED_KINDS
+
+    private val INSTALLED_KINDS = setOf(0, 1, 2, 6, 12)
 }
 
 /** Saves Purchased and Installed for showing while the PC is off. */
@@ -218,7 +259,7 @@ internal object LibraryJson {
     private fun entries(list: List<LibraryEntry>) = JSONArray(
         list.map { e ->
             JSONObject().put("appId", e.appId).put("name", e.name).put("coverUrl", e.coverUrl)
-                .put("installed", e.installed).put("sizeBytes", e.sizeBytes).put("minutes", e.minutes)
+                .put("installed", e.installed).put("sizeBytes", e.sizeBytes).put("minutes", e.minutes).put("shortcut", e.shortcut)
         },
     )
 
@@ -227,7 +268,10 @@ internal object LibraryJson {
     } else {
         (0 until a.length()).mapNotNull { i ->
             val o = a.optJSONObject(i) ?: return@mapNotNull null
-            LibraryEntry(o.optInt("appId"), o.optString("name"), o.optString("coverUrl"), o.optBoolean("installed"), o.optLong("sizeBytes"), o.optLong("minutes"))
+            LibraryEntry(
+                o.optInt("appId"), o.optString("name"), o.optString("coverUrl"), o.optBoolean("installed"),
+                o.optLong("sizeBytes"), o.optLong("minutes"), o.optBoolean("shortcut"),
+            )
         }
     }
 }

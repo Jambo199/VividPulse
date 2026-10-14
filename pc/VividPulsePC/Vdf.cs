@@ -1,12 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 
 namespace VividPulsePC
 {
     /// <summary>
-    /// Valve's KeyValues text format (Steam's .vdf and .acf files): "key" "value" pairs and
-    /// "key" { ... } blocks. Keys ignore case, as Steam treats them.
+    /// Valve's KeyValues format (Steam's .vdf and .acf files): "key" "value" pairs and
+    /// "key" { ... } blocks, or the binary form. Keys ignore case, as Steam treats them.
     /// </summary>
     static class Vdf
     {
@@ -88,6 +89,57 @@ namespace VividPulsePC
                 return s.Substring(start, i - start);
             }
             return null;
+        }
+
+        /// <summary>
+        /// The binary form Steam uses for shortcuts.vdf (non-Steam games): a type byte, a
+        /// null-terminated key, then the value. Numbers are kept as text, like the text form's.
+        /// </summary>
+        public static Dictionary<string, object> ParseBinary(byte[] data)
+        {
+            int i = 0;
+            return ReadBlock(data, ref i);
+        }
+
+        static Dictionary<string, object> ReadBlock(byte[] d, ref int i)
+        {
+            var block = NewBlock();
+            while (i < d.Length)
+            {
+                byte type = d[i++];
+                if (type == 0x08) break;
+                string key = ReadString(d, ref i);
+                object value;
+                switch (type)
+                {
+                    case 0x00: value = ReadBlock(d, ref i); break;
+                    case 0x01: value = ReadString(d, ref i); break;
+                    case 0x02: value = Take(d, ref i, 4) ? BitConverter.ToInt32(d, i - 4).ToString(CultureInfo.InvariantCulture) : null; break;
+                    case 0x03: value = Take(d, ref i, 4) ? BitConverter.ToSingle(d, i - 4).ToString(CultureInfo.InvariantCulture) : null; break;
+                    case 0x07: value = Take(d, ref i, 8) ? BitConverter.ToUInt64(d, i - 8).ToString(CultureInfo.InvariantCulture) : null; break;
+                    case 0x0A: value = Take(d, ref i, 8) ? BitConverter.ToInt64(d, i - 8).ToString(CultureInfo.InvariantCulture) : null; break;
+                    default: throw new FormatException("Unknown value type " + type + " at " + (i - 1));
+                }
+                if (value == null) throw new FormatException("The file ends early");
+                if (!block.ContainsKey(key)) block[key] = value;
+            }
+            return block;
+        }
+
+        static bool Take(byte[] d, ref int i, int n)
+        {
+            if (i + n > d.Length) return false;
+            i += n;
+            return true;
+        }
+
+        static string ReadString(byte[] d, ref int i)
+        {
+            int start = i;
+            while (i < d.Length && d[i] != 0) i++;
+            var s = Encoding.UTF8.GetString(d, start, i - start);
+            i++;
+            return s;
         }
 
         /// <summary>The block at <paramref name="path"/>, or null.</summary>

@@ -13,6 +13,7 @@
     <Compile Include="../VividPulsePC/Vdf.cs" />
     <Compile Include="../VividPulsePC/SteamReader.cs" />
     <Compile Include="../VividPulsePC/Steam.cs" />
+    <Compile Include="../VividPulsePC/Downloads.cs" />
     <Compile Include="../VividPulsePC/Log.cs" />
     <Compile Include="../VividPulsePC/Config.cs" />
   </ItemGroup>

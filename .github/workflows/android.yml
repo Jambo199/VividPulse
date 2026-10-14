@@ -106,9 +106,20 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Version 2.N, N being how many commits changed the PC program: it only goes up (and the
+      # program only offers to update itself) when the PC program changes.
+      - name: Work out its version
+        shell: bash
+        run: |
+          n=$(git rev-list --count HEAD -- pc/VividPulsePC)
+          echo "PC_BUILD=$n" >> "$GITHUB_ENV"
+          echo "Vivid Pulse PC 2.$n"
 
       - name: Build Vivid Pulse PC
-        run: dotnet build pc/VividPulsePC -c Release -nologo
+        run: dotnet build pc/VividPulsePC -c Release -nologo -p:Version=2.${{ env.PC_BUILD }}.0
 
       - name: Check how it reads Steam's files
         run: dotnet run --project pc/VividPulsePC.Tests -c Release
@@ -129,11 +140,28 @@ jobs:
           Get-ChildItem "Vivid Pulse PC" | Format-Table Name, Length
           Compress-Archive -Path "Vivid Pulse PC" -DestinationPath VividPulsePC.zip -Force
           Get-Item VividPulsePC.zip | Format-List Name, Length
+          # What the program's update check reads.
+          $info = [ordered]@{
+            build = [int]$env:PC_BUILD
+            version = "2.$env:PC_BUILD"
+            zip = "VividPulsePC.zip"
+            sha256 = (Get-FileHash VividPulsePC.zip -Algorithm SHA256).Hash.ToLower()
+            size = (Get-Item VividPulsePC.zip).Length
+            notes = "$(git log -1 --format=%s -- pc/VividPulsePC)"
+          }
+          [IO.File]::WriteAllText("$PWD\pc-version.json", ($info | ConvertTo-Json))
+          Get-Content pc-version.json
+
+      - name: Check that it updates itself
+        shell: cmd
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File ci\pc-update-test.ps1
 
       - uses: actions/upload-artifact@v4
         with:
           name: vivid-pulse-pc
-          path: VividPulsePC.zip
+          path: |
+            VividPulsePC.zip
+            pc-version.json
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -209,6 +237,11 @@ jobs:
           # Reviews and release dates from GetItems: a released game and an upcoming one.
           items='{"ids":[{"appid":1086940},{"appid":2215430}],"context":{"language":"english","country_code":"GB","steam_realm":1},"data_request":{"include_assets":true,"include_basic_info":true,"include_release":true,"include_reviews":true}}'
           probe "https://api.steampowered.com/IStoreBrowseService/GetItems/v1/?input_json=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$items")" 4000
+          # Each kind of app's "type" (the PC tab's Installed list goes by it): a game, software, a tool, DLC, a soundtrack.
+          items='{"ids":[{"appid":1086940},{"appid":431960},{"appid":993090},{"appid":250820},{"appid":243750},{"appid":2138330},{"appid":2138340},{"appid":1808500}],"context":{"language":"english","country_code":"GB","steam_realm":1},"data_request":{}}'
+          curl -sS -m 30 "https://api.steampowered.com/IStoreBrowseService/GetItems/v1/?input_json=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$items")" \
+            | python3 -c 'import json,sys; [print("--- kind", i.get("appid"), "type", i.get("type"), i.get("name")) for i in json.load(sys.stdin)["response"].get("store_items", [])]' \
+            || echo "(kinds failed)"
           probe "https://speed.cloudflare.com/meta" 600
           probe "https://speed.cloudflare.com/cdn-cgi/trace" 400
 
@@ -355,6 +388,8 @@ jobs:
           if [ -d compat ]; then cp -r compat/* allshots/ 2>/dev/null || true; fi
           if [ -n "$(ls -A allshots)" ]; then (cd allshots && zip -q -r ../screenshots.zip .); files="$files screenshots.zip"; fi
           if [ -f pc/VividPulsePC.zip ]; then cp pc/VividPulsePC.zip VividPulsePC.zip; files="$files VividPulsePC.zip"; fi
+          # Read by Vivid Pulse PC's update check (uploaded after its zip, like version.json).
+          if [ -f pc/pc-version.json ] && [ -f VividPulsePC.zip ]; then cp pc/pc-version.json pc-version.json; cat pc-version.json; fi
           cat > notes.md <<NOTES
           **Vivid Pulse for Android – build $BUILD** (\`${GITHUB_SHA::7}\`, emulator test: ${{ needs.emulator-test.result }})
 
@@ -380,12 +415,14 @@ jobs:
             others=$(echo $files | tr ' ' '\n' | grep -v '^version.json$' | tr '\n' ' ')
             ok=1
             gh release upload "$TAG" $others --repo "$GITHUB_REPOSITORY" --clobber || ok=0
+            if [ $ok = 1 ] && [ -f pc-version.json ]; then gh release upload "$TAG" pc-version.json --repo "$GITHUB_REPOSITORY" --clobber || ok=0; fi
             [ $ok = 1 ] && { gh release upload "$TAG" version.json --repo "$GITHUB_REPOSITORY" --clobber || ok=0; }
             gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE_LINE" --notes-file notes.md --prerelease || true
             # Point the release's tag at this build's commit too.
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" -f sha="$GITHUB_SHA" -F force=true > /dev/null || true
           else
             ok=1
+            [ -f pc-version.json ] && files="$files pc-version.json"
             gh release create "$TAG" $files --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
               --prerelease --title "$TITLE_LINE" --notes-file notes.md || ok=0
           fi

@@ -17,7 +17,7 @@ namespace VividPulsePC
     {
         public const int Port = 47800;
         public const int DiscoveryPort = 47801;
-        public const string Version = "2.0";
+        public static string Version => Updater.Version;
 
         readonly Config config;
         readonly LiveSampler live;
@@ -46,7 +46,7 @@ namespace VividPulsePC
             { "version", Version },
             { "name", Environment.MachineName },
             { "port", Port },
-            { "features", new[] { "downloads", "launch" } },
+            { "features", new[] { "downloads", "launch", "shortcuts" } },
         };
 
         public JObject SpecsNow()
@@ -150,6 +150,9 @@ namespace VividPulsePC
                     string query = path.Contains("?") ? path.Substring(path.IndexOf('?') + 1) : "";
 
                     if (route == "/hello") { Respond(stream, 200, Hello()); return; }
+                    // Pictures are fetched by the phone's image loader, with the code in the address.
+                    var inQuery = Regex.Match(query, @"(?:^|&)code=(\d+)");
+                    if (code == null && inQuery.Success) code = inQuery.Groups[1].Value;
                     if (code != config.Code)
                     {
                         Log.Write("Wrong code from " + from);
@@ -177,18 +180,28 @@ namespace VividPulsePC
                             break;
                         case "/launch":
                             var app = Regex.Match(query, @"appid=(\d+)");
-                            if (!app.Success) { Respond(stream, 404, new JObject { { "error", "No game" } }); break; }
+                            var shortcut = Regex.Match(query, @"shortcut=(-?\d+)");
+                            if (!app.Success && !shortcut.Success) { Respond(stream, 404, new JObject { { "error", "No game" } }); break; }
+                            string which = app.Success ? app.Groups[1].Value : "non-Steam " + shortcut.Groups[1].Value;
                             try
                             {
-                                Steam.Launch(int.Parse(app.Groups[1].Value));
-                                Log.Write("Starting game " + app.Groups[1].Value + " (asked from " + from + ")");
-                                Respond(stream, 200, new JObject { { "started", int.Parse(app.Groups[1].Value) } });
+                                if (app.Success) Steam.Launch(int.Parse(app.Groups[1].Value));
+                                else Steam.LaunchShortcut(int.Parse(shortcut.Groups[1].Value));
+                                Log.Write("Starting game " + which + " (asked from " + from + ")");
+                                Respond(stream, 200, new JObject { { "started", int.Parse(app.Success ? app.Groups[1].Value : shortcut.Groups[1].Value) } });
                             }
                             catch (Exception e)
                             {
-                                Log.Write("Couldn't start game " + app.Groups[1].Value + ": " + e.Message);
+                                Log.Write("Couldn't start game " + which + ": " + e.Message);
                                 Respond(stream, 500, new JObject { { "error", "Steam couldn't start it" } });
                             }
+                            break;
+                        case "/art":
+                            var art = Regex.Match(query, @"shortcut=(-?\d+)");
+                            var file = art.Success ? Steam.ShortcutArt(int.Parse(art.Groups[1].Value)) : null;
+                            if (file == null || new FileInfo(file).Length > 8 * 1024 * 1024) { Respond(stream, 404, new JObject { { "error", "No picture" } }); break; }
+                            var ext = Path.GetExtension(file).ToLowerInvariant();
+                            RespondBytes(stream, ext == ".png" ? "image/png" : ext == ".webp" ? "image/webp" : "image/jpeg", File.ReadAllBytes(file));
                             break;
                         default:
                             Respond(stream, 404, new JObject { { "error", "Not found" } });
@@ -202,12 +215,16 @@ namespace VividPulsePC
             }
         }
 
-        static void Respond(Stream stream, int status, object body)
+        static void Respond(Stream stream, int status, object body) =>
+            Send(stream, status, "application/json; charset=utf-8", Encoding.UTF8.GetBytes(Json.Write(body)));
+
+        static void RespondBytes(Stream stream, string type, byte[] bytes) => Send(stream, 200, type, bytes);
+
+        static void Send(Stream stream, int status, string type, byte[] bytes)
         {
-            var bytes = Encoding.UTF8.GetBytes(Json.Write(body));
             string reason = status == 200 ? "OK" : status == 401 ? "Unauthorized" : status == 404 ? "Not Found" : "Error";
             var head = Encoding.ASCII.GetBytes(
-                "HTTP/1.1 " + status + " " + reason + "\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: " + bytes.Length + "\r\nConnection: close\r\n\r\n");
+                "HTTP/1.1 " + status + " " + reason + "\r\nContent-Type: " + type + "\r\nContent-Length: " + bytes.Length + "\r\nConnection: close\r\n\r\n");
             stream.Write(head, 0, head.Length);
             stream.Write(bytes, 0, bytes.Length);
             stream.Flush();

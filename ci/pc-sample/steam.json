@@ -64,7 +64,7 @@
   {
    "appId": 1808500,
    "name": "ARC Raiders",
-   "installed": true,
+   "installed": false,
    "sizeBytes": 36800000000.0,
    "updated": 1760000000,
    "library": "D:\\SteamLibrary",
@@ -167,5 +167,17 @@
   2246340,
   2358720,
   3240220
- ]
+ ],
+ "shortcuts": [
+  {
+   "appId": -1234567890,
+   "name": "My Emulator",
+   "lastPlayed": 1760000000
+  }
+ ],
+ "leftOut": [
+  "Steamworks Common Redistributables",
+  "SteamVR"
+ ],
+ "stamp": "5f1c2a7b9e3d4c60"
 }

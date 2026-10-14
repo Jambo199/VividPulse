@@ -3,7 +3,9 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Reflection;
+using System.Threading;
 using System.Windows.Forms;
+using Timer = System.Windows.Forms.Timer;
 using Microsoft.Win32;
 
 namespace VividPulsePC
@@ -21,11 +23,16 @@ namespace VividPulsePC
         readonly Server server;
         readonly NotifyIcon icon;
         readonly Control ui = new Control();
-        readonly ToolStripMenuItem codeItem, startItem;
+        readonly ToolStripMenuItem codeItem, startItem, updateItem;
         Form window;
-        bool toldAboutTray;
+        Label versionLabel;
+        Button updateButton;
+        bool toldAboutTray, checking, installing;
+        int installPercent;
+        // What clicking the balloon on show does.
+        Action balloonClick;
 
-        public Tray(Config config, Server server, bool showWindow)
+        public Tray(Config config, Server server, bool showWindow, bool updated = false)
         {
             this.config = config;
             this.server = server;
@@ -43,12 +50,19 @@ namespace VividPulsePC
             menu.Items.Add("Allow through firewall…", null, (s, e) => Firewall.Allow());
             menu.Items.Add("New code", null, (s, e) => NewCode());
             menu.Items.Add("Open log", null, (s, e) => OpenLog());
+            updateItem = new ToolStripMenuItem("Check for updates");
+            updateItem.Click += (s, e) => UpdateClicked(fromWindow: false);
+            menu.Items.Add(updateItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Quit", null, (s, e) => Quit());
             menu.Opening += (s, e) =>
             {
                 codeItem.Text = "Code  " + config.Code;
                 startItem.Checked = Startup.Enabled;
+                var r = Updater.Available;
+                updateItem.Text = installing ? "Updating…" : r != null ? "Update to " + r.Version : "Check for updates";
+                updateItem.Enabled = !installing && !checking;
+                updateItem.Font = r != null ? codeItem.Font : menu.Font;
             };
 
             icon = new NotifyIcon
@@ -59,8 +73,20 @@ namespace VividPulsePC
                 Visible = true,
             };
             icon.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) ShowWindow(); };
+            icon.BalloonTipClicked += (s, e) =>
+            {
+                var action = balloonClick;
+                balloonClick = null;
+                action?.Invoke();
+            };
             server.PhoneConnected += address => OnUi(() =>
-                icon.ShowBalloonTip(4000, "Phone connected", "Vivid Pulse on your phone (" + address + ") can see this PC.", ToolTipIcon.Info));
+                Balloon("Phone connected", "Vivid Pulse on your phone (" + address + ") can see this PC.", null));
+            Updater.Found += r => OnUi(() =>
+            {
+                RefreshUpdate();
+                Balloon("Update ready", "Vivid Pulse PC " + r.Version + " is out. Click here to update (it takes a few seconds).", () => UpdateClicked(fromWindow: false));
+            });
+            Updater.StartChecking();
 
             // The first time: show the code. Starting with Windows waits for the tick box.
             if (config.FirstRun)
@@ -71,6 +97,105 @@ namespace VividPulsePC
             // The first, PowerShell version started from a Startup-folder shortcut: this replaces it.
             if (Startup.RemoveOldShortcut()) Startup.Set(true);
             if (showWindow) ShowWindow();
+            if (updated) Balloon("Updated", "Vivid Pulse PC is now version " + Updater.Version + ".", null);
+        }
+
+        void Balloon(string title, string text, Action onClick)
+        {
+            balloonClick = onClick;
+            icon.ShowBalloonTip(onClick != null ? 8000 : 4000, title, text, ToolTipIcon.Info);
+        }
+
+        /// <summary>Updates when there's an update; otherwise looks for one.</summary>
+        void UpdateClicked(bool fromWindow)
+        {
+            if (installing || checking) return;
+            if (Updater.Available != null)
+            {
+                Install(Updater.Available, fromWindow);
+                return;
+            }
+            checking = true;
+            RefreshUpdate();
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                string problem = null;
+                try { Updater.Check(); }
+                catch (Exception e) { problem = e.Message; }
+                OnUi(() =>
+                {
+                    checking = false;
+                    RefreshUpdate();
+                    if (problem != null) Balloon("Couldn't look for updates", "Is this PC online? (" + problem + ")", null);
+                    else if (Updater.Available == null && !fromWindow) Balloon("Up to date", "Vivid Pulse PC " + Updater.Version + " is the latest.", null);
+                });
+            });
+        }
+
+        /// <summary>Downloads the update and swaps it in, then starts again as the new version.</summary>
+        void Install(Release release, bool fromWindow)
+        {
+            installing = true;
+            installPercent = 0;
+            RefreshUpdate();
+            new Thread(() =>
+            {
+                try
+                {
+                    var exe = Updater.Install(release, p => OnUi(() => { installPercent = p; RefreshUpdate(); }));
+                    OnUi(() =>
+                    {
+                        Updater.Restart(exe, fromWindow ? "" : "--startup");
+                        icon.Visible = false;
+                        icon.Dispose();
+                        Environment.Exit(0);
+                    });
+                }
+                catch (Exception e)
+                {
+                    Log.Write("Update failed: " + e);
+                    OnUi(() =>
+                    {
+                        installing = false;
+                        RefreshUpdate();
+                        var answer = MessageBox.Show(
+                            "Vivid Pulse PC couldn't update itself (" + e.Message + ").\n\nOpen the download page to get the new version yourself?",
+                            "Vivid Pulse PC", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                        if (answer == DialogResult.Yes)
+                        {
+                            try { Process.Start(new ProcessStartInfo(Updater.Page) { UseShellExecute = true }); }
+                            catch (Exception) { }
+                        }
+                    });
+                }
+            }) { IsBackground = true, Name = "Updating" }.Start();
+        }
+
+        /// <summary>The window's version line and update button, as things stand.</summary>
+        void RefreshUpdate()
+        {
+            if (versionLabel == null || versionLabel.IsDisposed) return;
+            var r = Updater.Available;
+            if (installing)
+            {
+                versionLabel.Text = "Updating… " + installPercent + "%";
+                versionLabel.ForeColor = Cyan;
+                updateButton.Text = "Updating…";
+            }
+            else if (r != null)
+            {
+                versionLabel.Text = "Version " + r.Version + " is out (you have " + Updater.Version + ")";
+                versionLabel.ForeColor = Green;
+                updateButton.Text = "Update now";
+            }
+            else
+            {
+                versionLabel.Text = "Version " + Updater.Version + (checking ? " · looking for updates…" : Updater.CheckedAt != DateTime.MinValue ? " · up to date" : "");
+                versionLabel.ForeColor = Muted;
+                updateButton.Text = "Check for updates";
+            }
+            updateButton.Enabled = !installing && !checking;
+            updateButton.BackColor = r != null && !installing ? Color.FromArgb(0x15, 0x80, 0x3D) : Panel;
         }
 
         public void ShowWindowFromAnyThread() => OnUi(ShowWindow);
@@ -137,7 +262,7 @@ namespace VividPulsePC
                 Font = new Font("Segoe UI", 10f),
                 AutoScaleMode = AutoScaleMode.Dpi,
                 AutoScaleDimensions = new SizeF(96f, 96f),
-                ClientSize = new Size(460, 470),
+                ClientSize = new Size(460, 520),
                 Padding = new Padding(24),
             };
             int x = 28, y = 22, width = 404;
@@ -217,6 +342,11 @@ namespace VividPulsePC
             hide.BackColor = Color.FromArgb(0x0E, 0x74, 0x90);
             y += 50;
             Add("Closing this window keeps Vivid Pulse PC running by the clock. Right-click its icon to quit.", new Font("Segoe UI", 8.5f), Muted, 36);
+            y += 4;
+            updateButton = MakeButton("Check for updates", x + width - 150, 150, (s, e) => UpdateClicked(fromWindow: true));
+            versionLabel = new Label { Location = new Point(x, y + 9), Size = new Size(width - 160, 22), Font = new Font("Segoe UI", 9f), ForeColor = Muted, BackColor = Color.Transparent };
+            f.Controls.Add(versionLabel);
+            RefreshUpdate();
 
             var timer = new Timer { Interval = 1000 };
             timer.Tick += (s, e) =>

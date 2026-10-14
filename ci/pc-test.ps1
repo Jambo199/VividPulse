@@ -45,7 +45,8 @@ function Write-Manifest($dir, $id, $name, $size) {
 Write-Manifest $steam 1091500 "Cyberpunk 2077" 74512345678
 Write-Manifest $steam 228980 "Steamworks Common Redistributables" 123456
 Write-Manifest $lib2 271590 "Grand Theft Auto V Legacy" 105000000000
-# Downloads: ARC Raiders downloading (StateFlags 1282 = update required, started, running), Counter-Strike 2's update queued.
+# Downloads: ARC Raiders downloading (StateFlags 1026 = update required, started; Steam's registry
+# flag says it's the one updating), Counter-Strike 2's update paused (its content log says so).
 function Write-Download($id, $name, $flags, $total, $done) {
     Write-Text "$steam\steamapps\appmanifest_$id.acf" (@"
 "AppState"
@@ -60,7 +61,7 @@ function Write-Download($id, $name, $flags, $total, $done) {
 }
 "@)
 }
-Write-Download 1808500 "ARC Raiders" 1282 36000000000 9000000000
+Write-Download 1808500 "ARC Raiders" 1026 36000000000 9000000000
 Write-Download 730 "Counter-Strike 2" 6 1200000000 0
 Write-Text "$steam\config\loginusers.vdf" (@"
 "users"
@@ -118,7 +119,17 @@ $entries = @(
 )
 Write-Text "$userConfig\cloudstorage\cloud-storage-namespace-1.json" ("[" + ($entries -join ",") + "]")
 Get-Content "$userConfig\cloudstorage\cloud-storage-namespace-1.json" | Write-Host
+# A non-Steam game (binary shortcuts.vdf: "My Emulator", ID -1234567890) with a picture of its own.
+[IO.File]::WriteAllBytes("$userConfig\shortcuts.vdf", [Convert]::FromBase64String("AHNob3J0Y3V0cwAAMAACYXBwaWQALv1ptgFBcHBOYW1lAE15IEVtdWxhdG9yAAFFeGUAIkM6XEVtdVxlbXUuZXhlIgACSXNIaWRkZW4AAAAAAAJMYXN0UGxheVRpbWUAAHjnaAB0YWdzAAgICAg="))
+New-Item -ItemType Directory -Force "$userConfig\grid" | Out-Null
+[IO.File]::WriteAllBytes("$userConfig\grid\3060399406p.png", [Convert]::FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg+M8AAAMBAQAY3Y2wAAAAAElFTkSuQmCC"))
+# Steam's content log, newer than the manifests: Counter-Strike 2's update is paused.
+New-Item -ItemType Directory -Force "$steam\logs" | Out-Null
+$logAt = (Get-Date).AddSeconds(5).ToString("yyyy-MM-dd HH:mm:ss")
+Write-Text "$steam\logs\content_log.txt" ("[$logAt] AppID 730 state changed : Fully Installed,Update Required,Update Paused,Update Started,`r`n[$logAt] Current download rate: 92.519 Mbps`r`n")
 New-Item -Path "HKCU:\Software\Valve\Steam" -Force | Out-Null
+New-Item -Path "HKCU:\Software\Valve\Steam\Apps\1808500" -Force | Out-Null
+Set-ItemProperty "HKCU:\Software\Valve\Steam\Apps\1808500" -Name Updating -Value 1 -Type DWord
 Set-ItemProperty "HKCU:\Software\Valve\Steam" -Name SteamPath -Value ($steam -replace '\\', '/')
 Set-ItemProperty "HKCU:\Software\Valve\Steam" -Name RunningAppID -Value 1091500 -Type DWord
 
@@ -167,6 +178,12 @@ $sw.Restart(); $null = Ask "/live" $auth; Write-Host "     /live again took $($s
 $launch = Ask "/launch?appid=1091500" $auth "POST"
 Write-Host "     /launch -> $($launch.status) $($launch.body) (200, or 500 when nothing on the runner handles steam:// links)"
 if ($launch.status -ne 200 -and $launch.status -ne 500) { $failures += "/launch" }
+$shortcutLaunch = Ask "/launch?shortcut=-1234567890" $auth "POST"
+Write-Host "     /launch (non-Steam game) -> $($shortcutLaunch.status) $($shortcutLaunch.body)"
+if ($shortcutLaunch.status -ne 200 -and $shortcutLaunch.status -ne 500) { $failures += "/launch?shortcut" }
+Expect "/art with the code in the address" (Ask "/art?shortcut=-1234567890&code=$code") 200
+Expect "/art without a code" (Ask "/art?shortcut=-1234567890") 401
+Expect "/art for a game with no picture" (Ask "/art?shortcut=5&code=$code") 404
 Expect "/nothing" (Ask "/nothing" $auth) 404
 [IO.File]::WriteAllText("$out\server-specs.json", $specs.body)
 [IO.File]::WriteAllText("$out\server-live.json", $live.body)

@@ -141,6 +141,7 @@ tap "Accelerometer" && shot 16-sensor-live 3
 
 echo "== Games"
 fling_up() { for _ in $(seq 1 "$1"); do adb shell input swipe 540 1900 540 300 120; sleep 0.4; done; }
+fling_down() { for _ in $(seq 1 "$1"); do adb shell input swipe 540 500 540 1900 120; sleep 0.4; done; }
 open_page games; shot 20-games 12
 texts
 swipe_up; shot 21-games-scrolled 2
@@ -271,8 +272,10 @@ texts
 if tap "Installed ("; then
   shot 62c-pc-installed 4
   texts
-  tap "Play ARC Raiders" && sleep 3
-  grep -q "launch 1808500" "$PC_LOG" && echo "   ✅ the PC was asked to start ARC Raiders" || echo "   ⚠️ no launch request reached the PC"
+  texts | grep -q "My Emulator" && echo "   ✅ the non-Steam game is in Installed" || echo "   ⚠️ no non-Steam game in Installed"
+  grep -q "^.*art -1234567890" "$PC_LOG" && echo "   ✅ its picture came from the PC" || echo "   ⚠️ its picture wasn't asked for"
+  tap "Play Apex Legends" && sleep 3
+  grep -q "launch 1172470" "$PC_LOG" && echo "   ✅ the PC was asked to start Apex Legends" || echo "   ⚠️ no launch request reached the PC"
 fi
 fling_up 4; shot 62d-pc-specs 3
 fling_up 4; shot 62e-pc-specs-more 3
@@ -282,6 +285,17 @@ open_page tools; sleep 1
 open_page pc; sleep 8
 swipe_up; shot 62g-pc-downloads 2
 texts
+sleep 5
+shot 62g2-pc-downloads-moving 1
+echo "-- a download finishes while the page is open: Installed is fetched again by itself"
+before=$(grep -c "GET /steam" "$PC_LOG")
+curl -s "http://127.0.0.1:47800/_finish" > /dev/null
+sleep 12
+after=$(grep -c "GET /steam" "$PC_LOG")
+[ "$after" -gt "$before" ] && echo "   ✅ the library was fetched again ($before -> $after)" || echo "   ⚠️ the library wasn't fetched again ($before -> $after)"
+fling_down 4; sleep 2
+texts | grep -o "Installed ([0-9]*)" | head -1
+shot 62g3-pc-installed-after 1
 adb shell input keyevent KEYCODE_HOME
 sleep 3
 curl -s "http://127.0.0.1:47800/_finish" > /dev/null

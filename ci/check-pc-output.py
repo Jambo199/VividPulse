@@ -39,6 +39,8 @@ def as_list(value, what):
 
 hello = load("hello.json")
 check(hello.get("app") == "VividPulsePC" and hello.get("port") == 47800, f"hello: {hello}")
+if os.environ.get("PC_BUILD"):
+    check(hello.get("version") == "2." + os.environ["PC_BUILD"], f"version 2.{os.environ['PC_BUILD']}: {hello.get('version')}")
 
 specs = load("specs.json")
 cpu = specs.get("cpu") or {}
@@ -71,6 +73,10 @@ check(cp.get("installed") is True and cp.get("name") == "Cyberpunk 2077" and cp.
 check((games.get(271590) or {}).get("installed") is True, "GTA V found in the second library")
 check((games.get(570) or {}).get("installed") is False and (games.get(570) or {}).get("minutes") == 120, "Dota 2: played, not installed")
 check(228980 not in games, "Steam's redistributables left out")
+check("Steamworks Common Redistributables" in as_list(steam.get("leftOut"), "leftOut"), f"left out, by name: {steam.get('leftOut')}")
+check((games.get(1808500) or {}).get("installed") is False, "ARC Raiders, on its first download, isn't installed yet")
+shortcuts = as_list(steam.get("shortcuts"), "shortcuts")
+check([(x.get("appId"), x.get("name")) for x in shortcuts] == [(-1234567890, "My Emulator")], f"non-Steam games: {shortcuts}")
 collections = {c.get("name"): c for c in as_list(steam.get("collections"), "collections")}
 print(f"     collections: {collections}")
 purchased = collections.get("Purchased") or {}
@@ -85,8 +91,12 @@ downloads = load("downloads.json")
 items = as_list(downloads.get("downloads"), "downloads")
 print(f"     downloads: {items}")
 check([d.get("name") for d in items] == ["ARC Raiders", "Counter-Strike 2"], "downloads: ARC Raiders, then Counter-Strike 2")
-check(items[0].get("state") == "downloading" and items[0].get("bytesDone") == 9000000000 and items[0].get("bytesTotal") == 36000000000, "ARC Raiders downloading, 9 of 36 GB")
-check(items[1].get("state") == "queued", "Counter-Strike 2 update queued")
+if len(items) < 2:
+    items += [{}, {}]
+check(items[0].get("state") == "downloading" and 9000000000 <= items[0].get("bytesDone", 0) < 9500000000 and items[0].get("bytesTotal") == 36000000000,
+      "ARC Raiders downloading (Steam's registry flag), about 9 of 36 GB")
+check(items[1].get("state") == "paused" and items[1].get("bytesPerSec") == 0, "Counter-Strike 2 update paused (Steam's content log)")
+check(bool(steam.get("stamp")) and downloads.get("libraryStamp") == steam.get("stamp"), f"library stamp the same in both: {steam.get('stamp')} {downloads.get('libraryStamp')}")
 
 for n in notes:
     print("note " + n)

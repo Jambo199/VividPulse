@@ -14,7 +14,7 @@ namespace VividPulsePC
     /// How the PC is doing right now, sampled every second in the background so the phone's
     /// question gets an instant answer: CPU (total and per thread), clock, memory, GPU, network.
     /// </summary>
-    sealed class LiveSampler
+    sealed class LiveSampler : INetwork
     {
         volatile JObject latest;
         PerformanceCounter cpuTotal, cpuPerformance;
@@ -25,6 +25,11 @@ namespace VividPulsePC
         string nvidiaSmi;
         JObject gpu;
         int tick;
+
+        // What the PC has received, added up a reading at a time, for the last 15 minutes.
+        readonly object receivedGate = new object();
+        readonly List<KeyValuePair<DateTime, double>> received = new List<KeyValuePair<DateTime, double>>();
+        double receivedTotal;
 
         /// <summary>The latest readings (waiting a moment for the first ones just after starting).</summary>
         public JObject Latest
@@ -96,6 +101,8 @@ namespace VividPulsePC
             var mem = new MemoryStatus();
             GlobalMemoryStatusEx(mem);
             double? performance = Read(cpuPerformance);
+            long down = (long)netDown.Sum(c => Read(c) ?? 0);
+            AddReceived(down);
             return new JObject
             {
                 { "at", Clock.Now() },
@@ -105,11 +112,64 @@ namespace VividPulsePC
                 { "memoryUsedBytes", (long)(mem.ullTotalPhys - mem.ullAvailPhys) },
                 { "memoryTotalBytes", (long)mem.ullTotalPhys },
                 { "gpu", gpu },
-                { "downBytesPerSec", (long)netDown.Sum(c => Read(c) ?? 0) },
+                { "downBytesPerSec", down },
                 { "upBytesPerSec", (long)netUp.Sum(c => Read(c) ?? 0) },
                 { "uptimeSec", (long)(GetTickCount64() / 1000) },
                 { "playingAppId", Steam.RunningAppId() },
             };
+        }
+
+        void AddReceived(long bytesPerSec)
+        {
+            var now = DateTime.UtcNow;
+            lock (receivedGate)
+            {
+                if (received.Count > 0)
+                {
+                    double seconds = Math.Min(5, (now - received[received.Count - 1].Key).TotalSeconds);
+                    receivedTotal += bytesPerSec * Math.Max(0, seconds);
+                }
+                received.Add(new KeyValuePair<DateTime, double>(now, receivedTotal));
+                while (received.Count > 0 && now - received[0].Key > TimeSpan.FromMinutes(15)) received.RemoveAt(0);
+            }
+        }
+
+        /// <summary>The running total at a moment, between the readings either side of it.</summary>
+        double ReceivedAt(DateTime t)
+        {
+            if (t <= received[0].Key) return received[0].Value;
+            var last = received[received.Count - 1];
+            if (t >= last.Key) return last.Value;
+            int i = received.FindIndex(r => r.Key >= t);
+            var a = received[i - 1];
+            var b = received[i];
+            double part = (t - a.Key).TotalSeconds / Math.Max(0.001, (b.Key - a.Key).TotalSeconds);
+            return a.Value + (b.Value - a.Value) * part;
+        }
+
+        public long? ReceivedBetween(DateTime fromUtc, DateTime toUtc)
+        {
+            lock (receivedGate)
+            {
+                if (received.Count < 2 || toUtc <= fromUtc) return received.Count < 2 ? (long?)null : 0;
+                return (long)Math.Max(0, ReceivedAt(toUtc) - ReceivedAt(fromUtc));
+            }
+        }
+
+        public long? DownRate
+        {
+            get
+            {
+                lock (receivedGate)
+                {
+                    if (received.Count < 2) return null;
+                    var last = received[received.Count - 1];
+                    if (DateTime.UtcNow - last.Key > TimeSpan.FromSeconds(10)) return null;
+                    var from = last.Key - TimeSpan.FromSeconds(4);
+                    double seconds = (last.Key - (from < received[0].Key ? received[0].Key : from)).TotalSeconds;
+                    return seconds > 0.5 ? (long)((last.Value - ReceivedAt(from)) / seconds) : (long?)null;
+                }
+            }
         }
 
         void ListNetwork()
